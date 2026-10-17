@@ -58,6 +58,11 @@ impl Layout {
         self.text.address
     }
 
+    fn vtable_spec(&self) -> String {
+        let range = |seg: Segment| format!("{:#x}+{:#x}", seg.address, seg.pages * PAGE);
+        format!("{}:{},{}", range(self.text), range(self.rodata), range(self.data))
+    }
+
     fn readonly_specs(&self) -> [String; 2] {
         [self.text, self.rodata]
             .map(|seg| format!("readonly {:#x}+{:#x}", seg.address, seg.pages * PAGE))
@@ -95,6 +100,12 @@ pub(crate) fn parse(bytes: &[u8], image_len: u64) -> Result<Layout, String> {
         ));
     }
     Ok(Layout { text, rodata, data })
+}
+
+/// The `rawvtables` value for this layout: pointers into `.text` read from
+/// `.rodata` and `.data`.
+pub(crate) fn rawvtables_value(layout: &Layout) -> String {
+    layout.vtable_spec()
 }
 
 pub(crate) fn read(exheader: &str, binary: &str) -> Result<Layout, String> {

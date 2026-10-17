@@ -2688,6 +2688,9 @@ pub(crate) fn parse_args_with_filters(
         if !options.iter().any(|(name, _)| name == "rawthumb") {
             options.push(("rawthumb".into(), "on".into()));
         }
+        if !options.iter().any(|(name, _)| name == "rawvtables") {
+            options.push(("rawvtables".into(), crate::exheader::rawvtables_value(&layout)));
+        }
     }
 
     if raw_image {

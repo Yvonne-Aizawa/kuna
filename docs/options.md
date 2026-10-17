@@ -756,6 +756,10 @@ Three tiers:
 | a thumb function in a raw image decodes as garbage a32 | [`rawthumb`](#rawthumb) |
 | function pointers with the low bit set are normalized and decoded in the wrong mode | [`rawthumb`](#rawthumb) |
 | --isa arm and --isa thumb each decode half of a mixed raw image | [`rawthumb`](#rawthumb) |
+| most virtual methods of a raw c++ image are missing from the function list | [`rawvtables`](#rawvtables) |
+| a virtual call goes through a vtable slot with no method to open | [`rawvtables`](#rawvtables) |
+| functions reached only through a callback table are never discovered | [`rawvtables`](#rawvtables) |
+| a raw image has far fewer functions than its vtables point to | [`rawvtables`](#rawvtables) |
 | stripped go binary renders sub_<addr> instead of main.main and runtime.* names | [`gopclntab`](#gopclntab) |
 | go package function names missing | [`gopclntab`](#gopclntab) |
 | objective-c methods render as sub_<addr> instead of -[Class sel] | [`objc`](#objc) |
@@ -2807,6 +2811,14 @@ Program-prep enablement: what is discovered, decoded, and named before any funct
 - **When to flip:** A raw ARM32 image mixing A32 and Thumb code, where a function you address with its Thumb bit (an odd pointer from a vtable or callback table, or a `blx` target) decompiles as `halt_baddata()` or garbage under `--isa arm`. Off by default because it changes what an odd address means on a raw image, which was documented to be normalized; `--exheader` turns it on. Does nothing for an even entry, an image decoded wholly as Thumb with `--isa thumb`, or a non-ARM target.
 - **Where / provenance:** P1/code-data-partition · kuna · analysis-enablement · kuna-analysis-rawthumb
 - **Example:** `option rawthumb on`
+
+### `rawvtables` -- off | <code>:<scan>[,<scan>...], default `off`
+
+- **Symptoms:** most virtual methods of a raw c++ image are missing from the function list; a virtual call goes through a vtable slot with no method to open; functions reached only through a callback table are never discovered; a raw image has far fewer functions than its vtables point to.
+- **What it does:** Seed the functions a headerless ARM32 image points to from its data tables. A raw image has no symbols, and the direct-call sweep of `rawdiscover` cannot see a method reached only through a vtable or a callback table, because nothing in the code names its address; on a C++ game image that left most virtual methods undiscovered. The value names the code range pointers must land in and the data ranges to read, each `<start>+<size>` in hex (`0x100000+0x43c000:0x53c000+0x6a000,0x5a6000+0x45000`). Every run of three or more consecutive 32-bit words in a scan range whose targets lie in the code range seeds those targets as function entries: an even word-aligned target is an A32 entry, an odd one a Thumb entry (decoded in its mode when `rawthumb` is on, skipped when it is off). A single pointer-looking word is not enough, since a constant can look like an address; a run is what a table is. A halfword-aligned even target, a target outside the code range, or a zero ends a run.
+- **When to flip:** A raw ARM32 image of a C++ program (a 3DS `code.bin`) whose `functions` count is far below the number of methods, or whose decompiled callers end in `(*(code *)(*obj + 0x14))(obj)` with no method to open. Supply the ranges of the vtable-holding data (`.rodata`, `.data`); `--exheader` supplies them for you. Off by default because it names ranges only the caller knows and changes the function inventory. Does nothing outside a headerless ARM32 image.
+- **Where / provenance:** P1/code-data-partition · kuna · analysis-enablement · kuna-analysis-rawvtables
+- **Example:** `option rawvtables 0x100000+0x43c000:0x53c000+0x6a000,0x5a6000+0x45000`
 
 ### `gopclntab` -- on | off, default `on`
 

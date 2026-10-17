@@ -979,6 +979,11 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             options.push(("rawthumb".into(), "on".into()));
             forwarded.extend(["--option".into(), "rawthumb".into(), "on".into()]);
         }
+        if !options.iter().any(|(name, _)| name == "rawvtables") {
+            let value = crate::exheader::rawvtables_value(&layout);
+            options.push(("rawvtables".into(), value.clone()));
+            forwarded.extend(["--option".into(), "rawvtables".into(), value]);
+        }
     }
 
     if raw_image {

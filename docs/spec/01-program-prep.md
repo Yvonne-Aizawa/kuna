@@ -6507,6 +6507,18 @@ the C++ inheritance chain modeled by composition:
   painted and says so once. An even entry, an image decoded wholly as Thumb, and a
   non-ARM target are untouched.
 
+  `option rawvtables` (default off; `--exheader` supplies it) seeds the functions a
+  headerless ARM32 image's data tables point to. Its value names the code range pointers
+  must land in and the data ranges to read (`decompiler/crates/kuna-decomp/src/p1_partition/kuna_rawvtables.rs`,
+  `<code>:<scan>[,<scan>...]`, each `<start>+<size>` in hex). `seed_raw_vtables` reads the
+  image file at the commit and takes every run of three or more consecutive 32-bit words
+  whose targets, with the Thumb bit cleared, lie in the code range: an even word-aligned
+  target is an A32 entry, an odd one a Thumb entry, and a halfword-aligned even target,
+  an outside target or a zero ends the run. The targets join the entries before
+  discovery runs; Thumb ones also join the `rawthumb` seeds, and are skipped when that
+  option is off, since they would decode in the wrong mode. A note reports the count once.
+  `--exheader` passes `.text` as the code range and `.rodata` and `.data` as the scans.
+
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header
 (with the compiler-model fallback retry), runs `build_engine_and_init`, attaches

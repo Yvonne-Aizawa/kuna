@@ -1132,7 +1132,8 @@ turns `--option ctrsvc on` (unless you pass `ctrsvc` yourself), which names the
 supervisor calls by their libctru wrapper (`svcCloseHandle(handle)`) and models the
 registers each reads and writes, and `--option rawthumb on`, which decodes a function
 addressed with its Thumb bit set (`kuna decompile code.bin 0x100097 ...`) as Thumb
-while the rest of the image stays A32. With no
+while the rest of the image stays A32, and `--option rawvtables`, which seeds the
+functions that runs of code pointers in `.rodata` and `.data` name. With no
 `--addr`/`--entry`, `decompile-all` and `functions` seed discovery at the `.text`
 start. An explicit `--target` or `--isa` wins; a `--base` that differs from the
 header is an error, as is a header whose segments are not contiguous or longer than

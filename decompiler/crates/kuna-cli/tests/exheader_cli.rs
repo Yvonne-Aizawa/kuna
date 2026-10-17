@@ -12,6 +12,12 @@ fn code_image() -> Vec<u8> {
         image[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
     image[0x40..0x44].copy_from_slice(&[0x07, 0x20, 0x70, 0x47]);
+    for (at, value) in [(0x50, 0xe3a00001u32), (0x54, 0xe12fff1e), (0x60, 0xe3a00002), (0x64, 0xe12fff1e)] {
+        image[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    for (i, pointer) in [BASE + 0x50, BASE + 0x60, BASE + 0x41].iter().enumerate() {
+        image[0x1000 + i * 4..0x1004 + i * 4].copy_from_slice(&pointer.to_le_bytes());
+    }
     image
 }
 
@@ -110,4 +116,24 @@ fn an_odd_address_decodes_that_function_as_thumb() {
         "decompile", &code, "0x100041", "--exheader", &header, "--option", "rawthumb", "off", "--sleighpath", &sp,
     ]);
     assert!(!stdout.contains("return 7;"), "{stdout}");
+}
+
+#[test]
+fn a_pointer_table_in_rodata_seeds_the_functions_it_names() {
+    let code = write("3ds-code-vtable", &code_image());
+    let header = write("3ds-exheader-vtable", &exheader(0x20));
+    let sp = specs();
+    let list = |extra: &[&str]| {
+        let mut args = vec!["functions", code.as_str(), "--exheader", header.as_str(), "--json", "--sleighpath", sp.as_str()];
+        args.extend(extra);
+        let (stdout, stderr, status) = common::run_kuna(&args);
+        assert_eq!(status, 0, "{stderr}");
+        stdout
+    };
+    let seeded = list(&[]);
+    for address in ["0x100050", "0x100060", "0x100040"] {
+        assert!(seeded.contains(&format!("\"address_hex\": \"{address}\"")), "{address}: {seeded}");
+    }
+    let plain = list(&["--option", "rawvtables", "off"]);
+    assert!(!plain.contains("\"address_hex\": \"0x100060\""), "{plain}");
 }

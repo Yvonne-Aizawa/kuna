@@ -1931,6 +1931,11 @@ pub struct Architecture {
     /// normalized to an even address and decoded in the image-wide mode;
     /// default off.
     pub analysis_rawthumb: bool,
+    /// (kuna `rawvtables`) The ranges a headerless ARM32 image's function
+    /// pointers are read from, and the code they must target; `None` (the
+    /// default) reads none.  See
+    /// [`kuna_rawvtables`](crate::kuna_rawvtables).
+    pub raw_vtables: Option<crate::kuna_rawvtables::RawVtableSpec>,
     /// (kuna) Gate the MIPS `$gp`-recovery (`t9` tracking) pass (`mips_gp`); default on.
     pub analysis_mips_gp: bool,
     /// (kuna) Gate the i386-PIE PLT-stub decode (`i386_pie_plt`); default on. The
@@ -3053,6 +3058,7 @@ impl Architecture {
             analysis_armwalkmode: false,
             analysis_entrythumbflow: false,
             analysis_rawthumb: false,
+            raw_vtables: None,
             analysis_mips_gp: false,
             analysis_i386_pie_plt: false,
             analysis_ifuncfpret: false, // (kuna) option ifuncfpret, default off (opt-in)

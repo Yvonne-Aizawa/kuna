@@ -2486,6 +2486,63 @@ impl ConsoleProgram {
         }
     }
 
+    /// (kuna `rawvtables`) Add the function pointers the image's tables hold to
+    /// the entries, and the Thumb ones to the `rawthumb` seeds when that is on.
+    fn seed_raw_vtables(&mut self) {
+        let Some(spec) = self.arch().raw_vtables.clone() else {
+            return;
+        };
+        if self.container != ProgramContainer::Raw
+            || self.raw_address_units != Some((1, true))
+        {
+            return;
+        }
+        let Some(code_space) = self.analysis_code_space.clone() else {
+            return;
+        };
+        let Some(base) = self
+            .sections()
+            .into_iter()
+            .filter(|(_, _, flags)| flags & section_flags::CODE != 0)
+            .map(|(addr, _, _)| addr)
+            .min()
+        else {
+            return;
+        };
+        let path = self.image_path();
+        let Ok(bytes) = std::fs::read(&path) else {
+            return;
+        };
+        let roots = kuna_decomp::kuna_rawvtables::scan(&spec, &bytes, base);
+        let thumb_on = self.arch().analysis_rawthumb;
+        let known: BTreeSet<u64> =
+            self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
+        let mut added = 0usize;
+        let mut thumb = 0usize;
+        for (list, is_thumb) in [(&roots.arm, false), (&roots.thumb, true)] {
+            if is_thumb && !thumb_on {
+                continue;
+            }
+            for &vma in list {
+                if known.contains(&vma) {
+                    continue;
+                }
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+                added += 1;
+                if is_thumb {
+                    self.raw_thumb_seeds.push(vma);
+                    thumb += 1;
+                }
+            }
+        }
+        kuna_base::notes::say_once(
+            &path,
+            &format!(
+                "[kuna rawvtables] {path}: {added} function pointer(s) from the tables seeded ({thumb} Thumb)"
+            ),
+        );
+    }
+
     /// (kuna `rawthumb`) Paint the flow reachable from each odd raw-image entry
     /// as Thumb, writing the database now so the discovery that follows decodes
     /// it in the right mode, and stashing the paints for the commit's record.
@@ -2562,6 +2619,7 @@ impl ConsoleProgram {
     /// defensively re-gated facts merge into the same `merged` output committed
     /// below. With Listing off, this whole block is skipped.
     pub fn commit_pending_analysis(&mut self) -> KunaResult<()> {
+        self.seed_raw_vtables();
         self.paint_raw_thumb_seeds()?;
         if !self.pending_synthetic_entries.is_empty() {
             // (kuna `rawdiscover`) A headerless image reaches this point holding
