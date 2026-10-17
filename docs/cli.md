@@ -1127,11 +1127,14 @@ an odd ARM data or property address still selects the odd byte.
 raw image whose layout comes from the NCCH extended header. It implies
 `--raw-image`, targets `ARM:LE:32:v6:default`, uses `--isa arm`, bases the image at
 the header's `.text` address, and declares `.text` and `.rodata` read-only so
-literal-pool loads fold to the globals they name. `.data` stays writable. With no
+literal-pool loads fold to the globals they name. `.data` stays writable. It also
+turns `--option ctrsvc on` (unless you pass `ctrsvc` yourself), which names the
+supervisor calls by their libctru wrapper (`svcCloseHandle(handle)`) and models the
+registers each reads and writes. With no
 `--addr`/`--entry`, `decompile-all` and `functions` seed discovery at the `.text`
 start. An explicit `--target` or `--isa` wins; a `--base` that differs from the
 header is an error, as is a header whose segments are not contiguous or longer than
-the image. BSS, `svc` names and per-function ARM/Thumb are not handled yet.
+the image. BSS and per-function ARM/Thumb are not handled yet.
 
 ```bash
 kuna decompile code.bin 0x10ec60 --exheader exheader.bin

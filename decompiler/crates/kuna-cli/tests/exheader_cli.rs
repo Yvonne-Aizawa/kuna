@@ -7,7 +7,8 @@ const BASE: u32 = 0x100000;
 fn code_image() -> Vec<u8> {
     let mut image = vec![0u8; 0x2020];
     let words: [u32; 4] = [0xe59f0004, 0xe5900000, 0xe12fff1e, BASE + 0x2010];
-    for (i, w) in words.iter().enumerate() {
+    let close_handle: [u32; 2] = [0xef000023, 0xe12fff1e];
+    for (i, w) in words.iter().chain(&[0, 0, 0, 0]).chain(&close_handle).enumerate() {
         image[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
     image
@@ -75,4 +76,21 @@ fn exheader_refuses_mismatched_input() {
     ]);
     assert_ne!(status, 0);
     assert!(stderr.contains("contradicts the exheader"), "{stderr}");
+}
+
+#[test]
+fn exheader_names_supervisor_calls() {
+    let code = write("3ds-code-svc", &code_image());
+    let header = write("3ds-exheader-svc", &exheader(0x20));
+    let sp = specs();
+    let (stdout, stderr, status) =
+        common::run_kuna(&["decompile", &code, "0x100020", "--exheader", &header, "--sleighpath", &sp]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("svcCloseHandle(a0)"), "{stdout}");
+
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "decompile", &code, "0x100020", "--exheader", &header, "--option", "ctrsvc", "off", "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("software_interrupt(0x23)"), "{stdout}");
 }

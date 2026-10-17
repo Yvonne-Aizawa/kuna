@@ -2682,6 +2682,9 @@ pub(crate) fn parse_args_with_filters(
             entry_seeds.push(EntrySelector::Numeric(layout.base()));
         }
         raw_image = true;
+        if !options.iter().any(|(name, _)| name == "ctrsvc") {
+            options.push(("ctrsvc".into(), "on".into()));
+        }
     }
 
     if raw_image {

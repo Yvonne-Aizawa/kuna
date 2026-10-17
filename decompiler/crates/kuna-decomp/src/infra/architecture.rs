@@ -481,6 +481,10 @@ pub struct Architecture {
     /// identified as an operating system's user-space program) or `on`.  See
     /// [`kuna_syscallregs`](crate::kuna_syscallregs).
     pub syscall_regs: crate::kuna_syscallregs::SyscallRegsMode,
+    /// (kuna `ctrsvc`) Name Nintendo 3DS supervisor calls and give them the 3DS
+    /// kernel's register effects.  See
+    /// [`kuna_syscallregs`](crate::kuna_syscallregs).
+    pub ctr_svc: bool,
     /// (kuna `pebnames`) When the Windows thread-environment segment base (`GS`
     /// on x86-64, `FS` on x86) is typed `TEB *`: `off`, `auto` (the default: only
     /// on an image the loader proved is a Windows user-mode PE) or `on` (any image
@@ -2781,6 +2785,7 @@ impl Architecture {
             fastfail_noreturn: false, // (kuna) option fastfailnoreturn; reset_defaults sets the shipped default
             int3_pad: crate::kuna_int3pad::Int3PadMode::Off, // (kuna) option int3pad; reset_defaults sets the shipped default
             x64_syscall: crate::kuna_x64syscall::X64SyscallMode::Off, // (kuna) option x64syscall; reset_defaults sets the shipped default
+            ctr_svc: false, // (kuna) option ctrsvc
             syscall_regs: crate::kuna_syscallregs::SyscallRegsMode::Off, // (kuna) option syscallregs; reset_defaults sets the shipped default
             image_os_userland: false, // (kuna) a load-time fact; set by the console's `load file`
             peb_names: crate::kuna_pebnames::PebNamesMode::Off, // (kuna) option pebnames; reset_defaults sets the shipped default
@@ -4112,8 +4117,11 @@ impl Architecture {
         ctx.msvc_str_append = self.msvc_str_append; // msvcstrappend
         ctx.x64_syscall = self.x64_syscall; // (kuna) x64syscall
         ctx.x64_syscall_memory_target = self.archid == "x86:LE:64:default:gcc";
-        ctx.syscall_regs = self.syscall_regs.fires(self.image_os_userland); // (kuna) syscallregs
         ctx.syscall_regs_family = crate::kuna_syscallregs::SyscallFamily::from_archid(&self.archid);
+        ctx.syscall_regs_generic = self.syscall_regs.fires(self.image_os_userland); // (kuna) syscallregs
+        ctx.ctr_svc = self.ctr_svc
+            && ctx.syscall_regs_family == Some(crate::kuna_syscallregs::SyscallFamily::Arm); // (kuna) ctrsvc
+        ctx.syscall_regs = ctx.syscall_regs_generic || ctx.ctr_svc;
         ctx.syscall_regs_userops =
             crate::kuna_syscallregs::userop_ids(&self.userops, ctx.syscall_regs_family);
         ctx.peb_names = self.peb_names.fires(
@@ -4997,8 +5005,8 @@ impl Architecture {
     fn register_string_builtins(&mut self) -> KunaResult<()> {
         use crate::userop::{
             BUILTIN_MEMCPY, BUILTIN_MEMSET, BUILTIN_STRINGDATA, BUILTIN_STRLEN, BUILTIN_STRNCPY,
-            BUILTIN_SYSCALL_ERROR, BUILTIN_VOLATILE_READ, BUILTIN_VOLATILE_WRITE,
-            BUILTIN_WCSNCPY,
+            BUILTIN_SVC_OUT, BUILTIN_SYSCALL_ERROR, BUILTIN_VOLATILE_READ,
+            BUILTIN_VOLATILE_WRITE, BUILTIN_WCSNCPY,
         };
         // Split the &mut userops borrow from the &self type-factory read by
         // building a small adapter over the (already-populated) factory.
@@ -5031,6 +5039,11 @@ impl Architecture {
             userops.register_builtin(BUILTIN_SYSCALL_ERROR, &adapter)?;
             // (kuna strlenscan) the length an inline `repnz scasb` computes.
             userops.register_builtin(BUILTIN_STRLEN, &adapter)?;
+            // (kuna ctrsvc) the Nintendo 3DS supervisor calls and their extra outputs.
+            userops.register_builtin(BUILTIN_SVC_OUT, &adapter)?;
+            for id in crate::kuna_syscallregs::ctr_builtin_ids() {
+                userops.register_builtin(id, &adapter)?;
+            }
             Ok(())
         })();
         self.userops = userops;

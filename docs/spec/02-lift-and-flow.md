@@ -1321,6 +1321,29 @@ registers set, so it also passes the kernel the `a2` its caller left.
 `decompiler/crates/kuna-cli/tests/syscall_regs_cli.rs` loads the ARM witness as
 an object with and without a GNU ABI-tag note: the note turns the default on.
 
+**(kuna) Nintendo 3DS supervisor calls — `option ctrsvc`, default off,
+`decompiler/crates/kuna-decomp/src/p2_lift/kuna_syscallregs/ctr.rs`.** The 3DS
+kernel takes a supervisor call's number from the `svc` immediate, not from a
+register, reads its arguments from `r0`..`r5`, returns the result code in `r0` and
+writes any further outputs to `r1`..`r5`. With the option on and an ARM language,
+`ActionSyscallRegs` rewrites each bare `software_interrupt` whose immediate is in the
+table (`ctr.rs (SVCS)`, read off libctru's wrapper stubs and headers) as a
+`CALLOTHER` of a built-in user-op named after the wrapper (`svcCloseHandle`,
+`svcMapMemoryBlock`; ids from `BUILTIN_SVC_BASE`). The call reads exactly the
+registers the table lists as kernel inputs, whether or not the function wrote them,
+so a wrapper passing its own parameters through takes them as its parameters, and it
+writes `r0`. Each further output register the wrapper stores gets an opaque
+`svc_out()` right after the call (`ctr.rs (define_output)`), which the
+error-flag handling treats like `syscall_error()`: never merged or folded with another,
+and printed at its definition. A number outside the table stays a bare
+`software_interrupt`. The option implies the register-effect model of `syscallregs` for
+these calls, so the writable-memory guard and the argument-versus-returned-half rule
+apply unchanged; the generic per-OS model for other numbers is still chosen by
+`syscallregs` alone. Calls that never return (`svcExitProcess`, `svcExitThread`) are not
+marked no-return. `tests/stages/kuna-ctrsvc.xml` checks a handle close, a mutex whose
+handle comes back in `r1`, a four-register memory-block map and an unknown number under
+`on` and `off`; `kuna decompile --exheader` turns the option on.
+
 **(kuna) Overlapping branch target — `option overlapbranch`, default on
 (DIV-106), `decompiler/crates/kuna-decomp/src/p2_lift/kuna_overlapbranch.rs
 (kuna_overlaps_pending_branch)`.** A conditional branch pushes both successors and

@@ -971,6 +971,10 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             forwarded.push(isa.map_or("auto", ArmIsa::as_str).into());
         }
         raw_image = true;
+        if !options.iter().any(|(name, _)| name == "ctrsvc") {
+            options.push(("ctrsvc".into(), "on".into()));
+            forwarded.extend(["--option".into(), "ctrsvc".into(), "on".into()]);
+        }
     }
 
     if raw_image {

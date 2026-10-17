@@ -165,6 +165,7 @@ kuna_options! { self, p1;
         self.syscall_regs = mode;
         Ok(msg)
     },
+    "ctrsvc" => on_off!(ctr_svc, "Nintendo 3DS supervisor-call naming"),
     "pebnames" => {
         let (mode, msg) = crate::kuna_pebnames::OptionPebNames.apply(p1)?;
         self.peb_names = mode;

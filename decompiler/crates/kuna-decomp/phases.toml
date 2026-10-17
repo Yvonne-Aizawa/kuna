@@ -2450,6 +2450,28 @@ tier = "transform"
 symptoms = "a function containing svc/ecall/syscall/sc returns its arguments as a register pair (CONCAT44 or undefined16)|a MIPS syscall wrapper returns the syscall number it loaded into v0|software_interrupt(0), CallSupervisor(0), ecall() or syscall() shows no arguments while the disassembly loads registers before it|a test of a system call's result tests the argument the function set up instead|a syscall wrapper returns its own first parameter|the same wrapper is right in a linked Linux program but wrong in its .o or a static musl build|a MIPS syscall wrapper grows a fourth parameter a3 it tests after the syscall|a PowerPC syscall wrapper tests an uninitialized cr0 after sc|a MIPS syscall wrapper that passes its parameters straight to the kernel shows none of them"
 
 [[settable]]
+option = "ctrsvc"
+values = "on|off"
+default = "off"
+destructive = false
+phase = "P2"
+subphase = "flow-classification"
+strength = "HARD"
+rewind = "P2"
+issue = "kuna-ctrsvc"
+summary = "Name Nintendo 3DS supervisor calls and give them the 3DS kernel's register effects. The ARM SLEIGH spec lowers `svc N` to a CALLOTHER with no register inputs and no output, so a 3DS `svc 0x1f` prints as `software_interrupt(0x1f)` with its arguments erased and its result code left as whatever the function had in `r0`. The 3DS kernel takes the call number from the instruction immediate, reads its arguments from `r0`..`r5`, returns the result code in `r0` and writes further outputs to `r1`..`r5`. On, each known call number becomes a call to a user-op named after its libctru wrapper (`svcMapMemoryBlock`, `svcCloseHandle`), reading exactly the registers that call's kernel entry takes and writing `r0` plus the extra output registers its wrapper stores (an opaque `svc_out()` each), so `svc 0x1f` prints as `svcMapMemoryBlock(handle,addr,perm,otherperm)`. The register table is read off libctru's wrapper stubs and headers (about 100 calls); a number outside it keeps the bare `software_interrupt`. Pointer outputs the wrapper writes through memory are covered by the same writable-memory guard `syscallregs` uses. Only ARM languages are affected. `kuna ... --exheader` turns this on for the image it loads."
+use_when = "A Nintendo 3DS image (a decrypted ExeFS `.code`) whose output shows `software_interrupt(N)` with no arguments, or whose `svc` result is lost. `--exheader` sets it for you; set it by hand on a raw 3DS image or a CRO. Off by default: the numbers mean something only on the 3DS kernel, and the image carries nothing that says which kernel it runs on. Does not model calls that never return (`svcExitProcess`, `svcExitThread`), and a call whose result registers beyond `r0`..`r5` are used is not in the table."
+example = "option ctrsvc on"
+source_decompiler = "kuna"
+inspiration = "devkitPro/libctru svc.s and svc.h; Pokemon X code.bin sub_10ec78 (svc 0x1f) and sub_10fb28 (svc 0x23)"
+change_kind = "opt-in-tool"
+tier = "transform"
+symptoms = "software_interrupt(0x1f) with no arguments in a 3DS binary|a 3DS svc result is replaced by the value the function had in r0|a 3DS supervisor call is not named|svc handle arguments are missing from the call"
+live_field = "ctr_svc"
+live_true = "on"
+live_false = "off"
+
+[[settable]]
 option = "decodehalt"
 values = "on|off"
 default = "on"

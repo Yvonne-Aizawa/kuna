@@ -132,6 +132,12 @@ pub const BUILTIN_SYSCALL_ERROR: uint4 = 0x10000007;
 /// (kuna) Built-in id for `strlen`, the length an inline `repnz scasb` scan
 /// computes (`strlenscan`).
 pub const BUILTIN_STRLEN: uint4 = 0x10000008;
+/// (kuna) Built-in id for `svc_out`, an extra output register a Nintendo 3DS
+/// supervisor call writes (`ctrsvc`).
+pub const BUILTIN_SVC_OUT: uint4 = 0x10000009;
+/// (kuna) First built-in id of the Nintendo 3DS supervisor calls (`ctrsvc`);
+/// call number `n` is `BUILTIN_SVC_BASE + n`.
+pub const BUILTIN_SVC_BASE: uint4 = 0x10001000;
 
 // ---------------------------------------------------------------------------
 // UserOpBase + UserPcodeOp hierarchy (userop.hh:47-318)
@@ -989,6 +995,11 @@ impl UserOpManage {
             }
             BUILTIN_SYSCALL_ERROR => {
                 UserPcodeOp::new_unspecialized(b"syscall_error", BUILTIN_SYSCALL_ERROR as int4)
+            }
+            BUILTIN_SVC_OUT => UserPcodeOp::new_unspecialized(b"svc_out", BUILTIN_SVC_OUT as int4),
+            id if crate::kuna_syscallregs::ctr_builtin_name(id).is_some() => {
+                let name = crate::kuna_syscallregs::ctr_builtin_name(id).unwrap();
+                UserPcodeOp::new_unspecialized(name.as_bytes(), id as int4)
             }
             BUILTIN_STRLEN => {
                 let ptr_size = types.get_size_of_pointer();
