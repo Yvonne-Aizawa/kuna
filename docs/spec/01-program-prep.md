@@ -6534,7 +6534,7 @@ the C++ inheritance chain modeled by composition:
   load are applied to the mapped bytes: each internal one points a patched word at its
   referred segment plus addend (`R_ARM_ABS32`/`TARGET1`, `REL32`, `PREL31`, `CALL`,
   `JUMP24`, `THM_PC22`), and each import's patch list points its words at the import's stub,
-  named `import_<module>_<offset>` (named imports keep their own name). A thunk `ldr
+  named `import_<module>_<address>`, the address being the import's address in the static module (named imports keep their own name). A thunk `ldr
   pc,[pc,#n]` through such a word takes the import's name too, so a call to it reads as a call
   to the import. Named exports and the `OnLoad`/`OnExit`/`OnUnresolved`/`nnroControlObject_`
   hooks become named entries. The program is a raw-container program: `bootstrap_from_cro`

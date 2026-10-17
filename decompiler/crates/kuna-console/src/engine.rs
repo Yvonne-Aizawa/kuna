@@ -4011,7 +4011,13 @@ pub fn bootstrap_from_raw(
     prog.raw_address_units = Some((word_size, arm32));
     prog.raw_thumb_seeds = thumb_seeds;
     let names_space = prog.analysis_code_space.clone().expect("raw program keeps its code space");
-    for (addr, name) in kuna_analysis::symbolnames::from_env() {
+    let supplied = kuna_analysis::symbolnames::from_env();
+    kuna_analysis::symbolnames::report_unmatched(
+        path,
+        supplied.iter().map(|(addr, _)| *addr),
+        |addr| addr >= image_base && addr < image_end,
+    );
+    for (addr, name) in supplied {
         if addr >= image_base && addr < image_end {
             if !prog.pending_synthetic_entries.iter().any(|a| a.get_offset() == addr) {
                 prog.pending_synthetic_entries.push(Address::new(Rc::clone(&names_space), addr));

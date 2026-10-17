@@ -225,6 +225,7 @@ impl CroLoadImage {
 
         let supplied: std::collections::HashMap<u64, String> =
             crate::symbolnames::from_env().into_iter().collect();
+        let mut used: std::collections::HashSet<u64> = std::collections::HashSet::new();
         let mut stubs: Vec<(String, u64)> = Vec::new();
         let mut code_pointers: Vec<u64> = Vec::new();
         if relocate {
@@ -284,10 +285,14 @@ impl CroLoadImage {
                 for i in 0..anon_n.min(0x10000) {
                     let target = rd.u32(anon_at + 8 * i)?;
                     let name = if target & 0xf == 0 {
-                        supplied
-                            .get(&(STATIC_MODULE_BASE + u64::from(target >> 4)))
-                            .cloned()
-                            .unwrap_or_else(|| format!("import_{module_name}_{:x}", target >> 4))
+                        let address = STATIC_MODULE_BASE + u64::from(target >> 4);
+                        match supplied.get(&address) {
+                            Some(name) => {
+                                used.insert(address);
+                                name.clone()
+                            }
+                            None => format!("import_{module_name}_{address:x}"),
+                        }
                     } else {
                         format!("import_{module_name}_{}_{:x}", target & 0xf, target >> 4)
                     };
@@ -319,14 +324,17 @@ impl CroLoadImage {
         for (addr, name) in &supplied {
             if let Some(symbol) = symbols.iter_mut().find(|s| s.addr == *addr) {
                 symbol.name = name.clone();
+                used.insert(*addr);
             } else if module
                 .segments
                 .iter()
                 .any(|s| s.kind == TYPE_TEXT && *addr >= u64::from(s.offset) && *addr < u64::from(s.offset + s.size))
             {
                 symbols.push(CroSymbol { name: name.clone(), addr: *addr, code: true });
+                used.insert(*addr);
             }
         }
+        crate::symbolnames::report_unmatched(filename, supplied.keys().copied(), |a| used.contains(&a));
 
         let mut sections = Vec::new();
         for seg in &module.segments {
@@ -600,9 +608,9 @@ mod tests {
             [word(&image, text + 0x20), word(&image, text + 0x24), word(&image, text + 0x28)],
             [0x230, 0x234, 0x238]
         );
-        let stub = image.symbols().iter().find(|s| s.name == "import_static_123" && s.addr >= 0x1020).unwrap();
+        let stub = image.symbols().iter().find(|s| s.name == "import_static_100123" && s.addr >= 0x1020).unwrap();
         assert_eq!(u64::from(word(&image, text + 0x10)), stub.addr);
-        assert!(image.symbols().iter().any(|s| s.name == "import_static_123" && s.addr == text));
+        assert!(image.symbols().iter().any(|s| s.name == "import_static_100123" && s.addr == text));
     }
 
     #[test]

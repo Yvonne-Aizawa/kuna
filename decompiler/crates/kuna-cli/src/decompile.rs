@@ -664,6 +664,9 @@ fn decompile(args: &DecompileArgs) -> Result<DecompileOutcome, String> {
             &engine.path,
             pinned_by,
         );
+        for line in stderr_text.lines().filter(|l| l.starts_with("[kuna symbols]")) {
+            eprintln!("{line}");
+        }
         let combined = format!("{stdout_text}\n{stderr_text}");
         if let Some(msg) = check_errors(
             &combined,

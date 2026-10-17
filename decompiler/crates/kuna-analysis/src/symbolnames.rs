@@ -73,6 +73,27 @@ pub fn read(path: &Path) -> Result<Vec<(u64, String)>, String> {
     Ok(names)
 }
 
+/// Say once, on stderr, how many supplied addresses named nothing, with the first few.
+pub fn report_unmatched(image: &str, addresses: impl Iterator<Item = u64>, matched: impl Fn(u64) -> bool) {
+    let mut all: Vec<u64> = addresses.collect();
+    all.sort_unstable();
+    let missed: Vec<u64> = all.iter().copied().filter(|a| !matched(*a)).collect();
+    if missed.is_empty() {
+        return;
+    }
+    let shown: Vec<String> = missed.iter().take(5).map(|a| format!("{a:#x}")).collect();
+    let more = if missed.len() > shown.len() { ", ..." } else { "" };
+    kuna_base::notes::say_once(
+        image,
+        &format!(
+            "[kuna symbols] {} of {} symbol(s) named nothing in {image} ({}{more}); check the addresses",
+            missed.len(),
+            all.len(),
+            shown.join(", ")
+        ),
+    );
+}
+
 /// The names in the file [`SYMBOLS_ENV`] points to; empty when it is unset or
 /// unreadable (the CLI has already rejected an unreadable file).
 pub fn from_env() -> Vec<(u64, String)> {
