@@ -502,6 +502,11 @@ pub struct ConsoleProgram {
     /// (kuna `rawthumb`) The Thumb ranges those seeds' walks painted, replayed
     /// after the image-wide mode so the odd entry's mode outranks it.
     raw_thumb_paints: Vec<kuna_analysis::pass::ContextPaint>,
+    /// (kuna `rawvtables`) Thumb pointers read from tables, held until the A32
+    /// descent says which of them point into code it already decoded.
+    table_thumb_roots: Vec<u64>,
+    /// (kuna `rawvtables`) The A32 pointers read from tables, held the same way.
+    table_arm_roots: Vec<u64>,
     /// (kuna) The engine default code space captured at load, used to build the
     /// `Address`es when the stashed analysis facts are committed at `read symbols`.
     analysis_code_space: Option<Rc<AddrSpace>>,
@@ -2468,21 +2473,33 @@ impl ConsoleProgram {
         let seeds: Vec<u64> =
             self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
         let known: BTreeSet<u64> = seeds.iter().copied().collect();
-        let found = {
+        let arm_candidates = std::mem::take(&mut self.table_arm_roots);
+        let thumb_candidates = std::mem::take(&mut self.table_thumb_roots);
+        let discovered = {
             let arch = self.arch();
-            kuna_analysis::listing::kuna_rawdiscover::discover(
+            kuna_analysis::listing::kuna_rawdiscover::discover_with_tables(
                 arch,
                 arch.translate(),
                 &code_space,
                 &exec,
                 &seeds,
+                &arm_candidates,
+                &thumb_candidates,
             )
         };
-        for vma in found {
+        for vma in discovered.found {
             if known.contains(&vma) {
                 continue;
             }
             self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+        }
+        let known: BTreeSet<u64> =
+            self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
+        for vma in discovered.thumb {
+            if !known.contains(&vma) {
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+            }
+            self.raw_thumb_seeds.push(vma);
         }
     }
 
@@ -2527,20 +2544,29 @@ impl ConsoleProgram {
                 if known.contains(&vma) {
                     continue;
                 }
-                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
-                added += 1;
                 if is_thumb {
-                    self.raw_thumb_seeds.push(vma);
+                    self.table_thumb_roots.push(vma);
                     thumb += 1;
+                } else {
+                    self.table_arm_roots.push(vma);
+                    added += 1;
                 }
             }
         }
         kuna_base::notes::say_once(
             &path,
             &format!(
-                "[kuna rawvtables] {path}: {added} function pointer(s) from the tables seeded ({thumb} Thumb)"
+                "[kuna rawvtables] {path}: {added} A32 and {thumb} Thumb function pointer(s) found in the tables"
             ),
         );
+        if !self.arch().analysis_rawdiscover {
+            let arm = std::mem::take(&mut self.table_arm_roots);
+            let thumb = std::mem::take(&mut self.table_thumb_roots);
+            for vma in arm.into_iter().chain(thumb.iter().copied()) {
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+            }
+            self.raw_thumb_seeds.extend(thumb);
+        }
     }
 
     /// (kuna `rawthumb`) Paint the flow reachable from each odd raw-image entry
@@ -2629,6 +2655,7 @@ impl ConsoleProgram {
             // are named and installed by the same loop.
             if self.container == ProgramContainer::Raw && self.arch().analysis_rawdiscover {
                 self.discover_raw_entries();
+                self.paint_raw_thumb_seeds()?;
             }
             let entries = std::mem::take(&mut self.pending_synthetic_entries);
             let symbols = entries
@@ -3781,6 +3808,8 @@ fn empty_program(
         pending_entry_thumb: None,
         raw_thumb_seeds: Vec::new(),
         raw_thumb_paints: Vec::new(),
+        table_thumb_roots: Vec::new(),
+        table_arm_roots: Vec::new(),
         analysis_code_space: None,
         dwarf_locals: Vec::new(),
         libctypes_glibc: false,

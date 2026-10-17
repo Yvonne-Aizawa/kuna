@@ -18,6 +18,9 @@ fn code_image() -> Vec<u8> {
     for (i, pointer) in [BASE + 0x50, BASE + 0x60, BASE + 0x41].iter().enumerate() {
         image[0x1000 + i * 4..0x1004 + i * 4].copy_from_slice(&pointer.to_le_bytes());
     }
+    for (i, pointer) in [BASE + 0x4, BASE + 0x8, BASE + 0x9].iter().enumerate() {
+        image[0x1010 + i * 4..0x1014 + i * 4].copy_from_slice(&pointer.to_le_bytes());
+    }
     image
 }
 
@@ -134,6 +137,8 @@ fn a_pointer_table_in_rodata_seeds_the_functions_it_names() {
     for address in ["0x100050", "0x100060", "0x100040"] {
         assert!(seeded.contains(&format!("\"address_hex\": \"{address}\"")), "{address}: {seeded}");
     }
+    assert!(!seeded.contains("\"address_hex\": \"0x100004\""), "mid-function pointer seeded: {seeded}");
+    assert!(!seeded.contains("\"address_hex\": \"0x100008\""), "mid-function pointer seeded: {seeded}");
     let plain = list(&["--option", "rawvtables", "off"]);
     assert!(!plain.contains("\"address_hex\": \"0x100060\""), "{plain}");
 }

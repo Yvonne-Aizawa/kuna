@@ -6514,9 +6514,14 @@ the C++ inheritance chain modeled by composition:
   image file at the commit and takes every run of three or more consecutive 32-bit words
   whose targets, with the Thumb bit cleared, lie in the code range: an even word-aligned
   target is an A32 entry, an odd one a Thumb entry, and a halfword-aligned even target,
-  an outside target or a zero ends the run. The targets join the entries before
-  discovery runs; Thumb ones also join the `rawthumb` seeds, and are skipped when that
-  option is off, since they would decode in the wrong mode. A note reports the count once.
+  an outside target or a zero ends the run. A table word is also a flag, a count or a
+  jump-table entry, so the pointers are checked against the code the descent has
+  decoded (`kuna_rawdiscover::discover_with_tables`): one that falls inside that code,
+  at an address that is not an entry the descent found, is dropped. The kept A32
+  pointers join a second descent as seeds; the kept Thumb ones join the `rawthumb`
+  seeds and are skipped when that option is off, since they would decode in the wrong
+  mode. With `rawdiscover` off there is no descent to check against, and every
+  pointer is taken. A note reports the count found once.
   `--exheader` passes `.text` as the code range and `.rodata` and `.data` as the scans.
 
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
