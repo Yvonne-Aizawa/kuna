@@ -991,7 +991,7 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             .as_deref()
             .is_none_or(|value| value.trim().is_empty())
         {
-            return Err("--raw-image requires --target <SLEIGH-language-id>".into());
+            return Err("--raw-image requires --target <SLEIGH-language-id> (see `kuna specs --list-targets`)".into());
         }
         if base.is_none() {
             return Err("--raw-image requires --base <address>".into());

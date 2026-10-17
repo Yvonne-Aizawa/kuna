@@ -1144,6 +1144,12 @@ kuna decompile code.bin 0x10ec60 --exheader exheader.bin
 kuna functions code.bin --exheader exheader.bin --json
 ```
 
+A 32-bit ARM raw image has no mode marker, so it also needs `--isa arm` or `--isa thumb`
+(`--exheader` supplies `arm`). `kuna specs --list-targets [WORD]` prints the language ids
+`--target` takes, filtered by `WORD`. `disassemble` and `read` take the same
+`--raw-image --target T --base VMA [--entry VMA]..`, and `--exheader`, as the other
+commands; with no `--entry` the listed address seeds discovery.
+
 Raw images carry no symbols, so there is no object-backed discovery tier to
 run; `--option rawdiscover off` leaves the inventory at the explicit seeds.
 On (the default) `rawdiscover` sweeps the executable bytes for direct call

@@ -142,3 +142,27 @@ fn a_pointer_table_in_rodata_seeds_the_functions_it_names() {
     let plain = list(&["--option", "rawvtables", "off"]);
     assert!(!plain.contains("\"address_hex\": \"0x100060\""), "{plain}");
 }
+
+#[test]
+fn disassemble_reads_a_code_image_and_specs_lists_targets() {
+    let code = write("3ds-code-dis", &code_image());
+    let header = write("3ds-exheader-dis", &exheader(0x20));
+    let sp = specs();
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "disassemble", &code, "0x100020", "--exheader", &header, "--count", "2", "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("0x100020") && stdout.contains("swi 0x23"), "{stdout}");
+
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "disassemble", &code, "0x100000", "--raw-image", "--target", "ARM:LE:32:v6", "--base", "0x100000",
+        "--isa", "arm", "--count", "1", "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("0x100000"), "{stdout}");
+
+    let (stdout, stderr, status) =
+        common::run_kuna(&["specs", "--list-targets", "arm:le:32", "--sleighpath", &sp]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.lines().any(|line| line == "ARM:LE:32:v6"), "{stdout}");
+}

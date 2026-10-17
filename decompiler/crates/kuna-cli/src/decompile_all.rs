@@ -1861,7 +1861,7 @@ fn apply_one_option(prog: &mut ConsoleProgram, name: &str, value: &str) -> Resul
 
 /// The SLEIGH spec roots (an explicit `--sleighpath` wins, else `SLEIGHHOME` +
 /// the repo `specs/`), matching `kuna fid`'s resolution.
-fn spec_roots(sleighpath: Option<&str>) -> Vec<String> {
+pub(crate) fn spec_roots(sleighpath: Option<&str>) -> Vec<String> {
     let mut roots: Vec<String> = Vec::new();
     if let Some(p) = sleighpath.filter(|s| !s.is_empty()) {
         roots.push(p.to_string());
@@ -2698,7 +2698,7 @@ pub(crate) fn parse_args_with_filters(
             return Err("--raw-image is not supported by decompile-graph".into());
         }
         if target.as_deref().is_none_or(|value| value.trim().is_empty()) {
-            return Err("--raw-image requires --target <SLEIGH-language-id>".into());
+            return Err("--raw-image requires --target <SLEIGH-language-id> (see `kuna specs --list-targets`)".into());
         }
         if base.is_none() {
             return Err("--raw-image requires --base <address>".into());
