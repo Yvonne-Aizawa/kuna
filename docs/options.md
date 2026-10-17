@@ -752,6 +752,10 @@ Three tiers:
 | a callee reached by bl from a thumb entry decodes as a32 | [`entrythumbflow`](#entrythumbflow) |
 | a32 code in the same section as a thumb entry decodes as thumb | [`entrythumbflow`](#entrythumbflow) |
 | loading a te reports the thumb context walk stopped | [`entrythumbflow`](#entrythumbflow) |
+| a raw arm function addressed with its thumb bit decompiles to halt_baddata | [`rawthumb`](#rawthumb) |
+| a thumb function in a raw image decodes as garbage a32 | [`rawthumb`](#rawthumb) |
+| function pointers with the low bit set are normalized and decoded in the wrong mode | [`rawthumb`](#rawthumb) |
+| --isa arm and --isa thumb each decode half of a mixed raw image | [`rawthumb`](#rawthumb) |
 | stripped go binary renders sub_<addr> instead of main.main and runtime.* names | [`gopclntab`](#gopclntab) |
 | go package function names missing | [`gopclntab`](#gopclntab) |
 | objective-c methods render as sub_<addr> instead of -[Class sel] | [`objc`](#objc) |
@@ -2795,6 +2799,14 @@ Program-prep enablement: what is discovered, decoded, and named before any funct
 - **When to flip:** On (default): a mixed ARM TE whose entry has the Thumb bit decompiles its entry function and the callees it reaches as Thumb while A32 code elsewhere stays A32. Flip off to decode the entry with the language default mode, or use --isa thumb when the whole image is Thumb and the 4096-instruction bound would otherwise leave code unpainted.
 - **Where / provenance:** P1/code-data-partition · kuna · analysis-enablement · kuna-analysis-entrythumbflow
 - **Example:** `option entrythumbflow off`
+
+### `rawthumb` -- on | off, default `off`
+
+- **Symptoms:** a raw arm function addressed with its thumb bit decompiles to halt_baddata; a thumb function in a raw image decodes as garbage a32; function pointers with the low bit set are normalized and decoded in the wrong mode; --isa arm and --isa thumb each decode half of a mixed raw image.
+- **What it does:** Let an odd entry of a headerless 32-bit ARM image select Thumb for the function it starts. A raw image has no symbols or mapping markers, so its decode mode is the single `--isa` for the whole file, and an odd entry address (the ARM interworking convention for a Thumb function) was normalized to the even byte address and decoded in that one mode: `kuna decompile fw.bin 0x100097 --raw-image ... --isa arm` printed `halt_baddata()` for a Thumb function. On, each odd entry (and, with `--exheader`, an odd positional address) is walked as Thumb by the same entry-reachable walk `entrythumbflow` uses for a TE entry, and only the instruction ranges that walk decodes are painted Thumb, so the A32 code around it keeps the image mode. The walk follows fall-through, direct branches and mode-preserving `bl`; an interworking `blx` target keeps the mode its own encoding selects. A walk that reaches its 4096-instruction budget publishes what it painted and says so once.
+- **When to flip:** A raw ARM32 image mixing A32 and Thumb code, where a function you address with its Thumb bit (an odd pointer from a vtable or callback table, or a `blx` target) decompiles as `halt_baddata()` or garbage under `--isa arm`. Off by default because it changes what an odd address means on a raw image, which was documented to be normalized; `--exheader` turns it on. Does nothing for an even entry, an image decoded wholly as Thumb with `--isa thumb`, or a non-ARM target.
+- **Where / provenance:** P1/code-data-partition · kuna · analysis-enablement · kuna-analysis-rawthumb
+- **Example:** `option rawthumb on`
 
 ### `gopclntab` -- on | off, default `on`
 

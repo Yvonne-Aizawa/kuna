@@ -950,6 +950,7 @@ kuna_options! { self, p1;
     "entrythumbflow" => {
         on_off!(analysis_entrythumbflow, "Entry-reachable Thumb context walk")
     },
+    "rawthumb" => on_off!(analysis_rawthumb, "Thumb mode for odd raw-image entries"),
     "mips_gp" => on_off!(analysis_mips_gp, "MIPS $gp-recovery (t9 tracking) pass"),
     "i386_pie_plt" => {
         let val = on_or_off(p1)?;

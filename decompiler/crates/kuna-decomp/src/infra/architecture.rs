@@ -1926,6 +1926,11 @@ pub struct Architecture {
     /// instruction ranges, so a mixed image keeps its A32 code; off leaves the
     /// entry with the language default mode.
     pub analysis_entrythumbflow: bool,
+    /// (kuna) Gate `rawthumb`: an odd entry of a headerless 32-bit ARM image
+    /// selects Thumb for the flow reachable from it, instead of being
+    /// normalized to an even address and decoded in the image-wide mode;
+    /// default off.
+    pub analysis_rawthumb: bool,
     /// (kuna) Gate the MIPS `$gp`-recovery (`t9` tracking) pass (`mips_gp`); default on.
     pub analysis_mips_gp: bool,
     /// (kuna) Gate the i386-PIE PLT-stub decode (`i386_pie_plt`); default on. The
@@ -3047,6 +3052,7 @@ impl Architecture {
             analysis_armfuncmode: false,
             analysis_armwalkmode: false,
             analysis_entrythumbflow: false,
+            analysis_rawthumb: false,
             analysis_mips_gp: false,
             analysis_i386_pie_plt: false,
             analysis_ifuncfpret: false, // (kuna) option ifuncfpret, default off (opt-in)

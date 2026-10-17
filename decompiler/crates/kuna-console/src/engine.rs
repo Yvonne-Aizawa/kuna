@@ -496,6 +496,12 @@ pub struct ConsoleProgram {
     pending_analysis: Vec<(&'static str, kuna_analysis::pass::AnalysisOutput)>,
     /// Mixed-ARM TE entry evidence awaiting the post-overlay decode walk.
     pending_entry_thumb: Option<PendingEntryThumb>,
+    /// (kuna `rawthumb`) Odd entries of a headerless 32-bit ARM image, as the
+    /// even addresses the walk starts from, until the commit paints them Thumb.
+    raw_thumb_seeds: Vec<u64>,
+    /// (kuna `rawthumb`) The Thumb ranges those seeds' walks painted, replayed
+    /// after the image-wide mode so the odd entry's mode outranks it.
+    raw_thumb_paints: Vec<kuna_analysis::pass::ContextPaint>,
     /// (kuna) The engine default code space captured at load, used to build the
     /// `Address`es when the stashed analysis facts are committed at `read symbols`.
     analysis_code_space: Option<Rc<AddrSpace>>,
@@ -2480,6 +2486,58 @@ impl ConsoleProgram {
         }
     }
 
+    /// (kuna `rawthumb`) Paint the flow reachable from each odd raw-image entry
+    /// as Thumb, writing the database now so the discovery that follows decodes
+    /// it in the right mode, and stashing the paints for the commit's record.
+    fn paint_raw_thumb_seeds(&mut self) -> KunaResult<()> {
+        let seeds = std::mem::take(&mut self.raw_thumb_seeds);
+        if seeds.is_empty() || !self.arch().analysis_rawthumb {
+            return Ok(());
+        }
+        let Some(code_space) = self.analysis_code_space.clone() else {
+            return Ok(());
+        };
+        let ranges: Vec<(u64, u64)> = self
+            .sections()
+            .into_iter()
+            .filter(|(_, _, flags)| flags & section_flags::CODE != 0)
+            .map(|(addr, size, _)| (addr, size))
+            .collect();
+        let mut paints = Vec::new();
+        for entry in seeds {
+            let flow = kuna_analysis::listing::kuna_entrythumbflow::entry_thumb_flow(
+                self.arch(),
+                &code_space,
+                &ranges,
+                entry,
+                &[],
+            )?;
+            if flow.truncated {
+                let path = self.image_path();
+                kuna_base::notes::say_once(
+                    &path,
+                    &format!(
+                        "[kuna rawthumb] {path}: the Thumb walk from 0x{entry:x} stopped at {} instructions; code it did not reach decodes in the image mode",
+                        kuna_analysis::listing::kuna_entrythumbflow::MAX_INSTRUCTIONS
+                    ),
+                );
+            }
+            for paint in &flow.paints {
+                let begin = Address::new(Rc::clone(&code_space), paint.addr);
+                let end = paint.end.map(|end| Address::new(Rc::clone(&code_space), end));
+                self.arch().with_context_db_mut(|db| match end {
+                    Some(end) => {
+                        db.set_variable_region(paint.var.as_bytes(), &begin, &end, paint.value)
+                    }
+                    None => db.set_variable(paint.var.as_bytes(), &begin, paint.value),
+                })?;
+            }
+            paints.extend(flow.paints);
+        }
+        self.raw_thumb_paints.extend(paints);
+        Ok(())
+    }
+
     /// (kuna) Commit the stashed per-pass analysis facts, gated by the per-pass
     /// `--option <id> on|off` enable flags — the deferred half of the analysis
     /// boundary (conflict #4). Called from `IfcReadSymbols` (`read symbols`), which
@@ -2504,6 +2562,7 @@ impl ConsoleProgram {
     /// defensively re-gated facts merge into the same `merged` output committed
     /// below. With Listing off, this whole block is skipped.
     pub fn commit_pending_analysis(&mut self) -> KunaResult<()> {
+        self.paint_raw_thumb_seeds()?;
         if !self.pending_synthetic_entries.is_empty() {
             // (kuna `rawdiscover`) A headerless image reaches this point holding
             // only the `--entry` addresses the caller typed, because the
@@ -2784,6 +2843,7 @@ impl ConsoleProgram {
         // terms: see `suppress_pdb_interior_entries`.
         suppress_pdb_interior_entries(self.arch(), &code_space, &mut merged);
         merged.context_paints.extend(input_context_paints);
+        merged.context_paints.extend(std::mem::take(&mut self.raw_thumb_paints));
         let committed = commit_analysis_output(self, &code_space, merged);
         self.stash_float_scan();
         committed
@@ -3661,6 +3721,8 @@ fn empty_program(
         image_metadata: None,
         pending_analysis: Vec::new(),
         pending_entry_thumb: None,
+        raw_thumb_seeds: Vec::new(),
+        raw_thumb_paints: Vec::new(),
         analysis_code_space: None,
         dwarf_locals: Vec::new(),
         libctypes_glibc: false,
@@ -3771,8 +3833,12 @@ pub fn bootstrap_from_raw(
         ));
     }
     let mut normalized_entries = Vec::new();
+    let mut thumb_seeds = Vec::new();
     for &entry in entries {
         let entry_units = if arm32 { entry & !1 } else { entry };
+        if arm32 && entry & 1 == 1 && isa == Some(ArmIsa::Arm) {
+            thumb_seeds.push(address_to_byte(entry_units, "entry")?);
+        }
         let normalized = address_to_byte(entry_units, "entry")?;
         if normalized < image_base || normalized >= image_end {
             return Err(KunaError::lowlevel(format!(
@@ -3817,6 +3883,7 @@ pub fn bootstrap_from_raw(
     prog.pending_analysis = input_isa_stash(input_context_paints);
     prog.analysis_code_space = Some(code_space);
     prog.raw_address_units = Some((word_size, arm32));
+    prog.raw_thumb_seeds = thumb_seeds;
     Ok(prog)
 }
 

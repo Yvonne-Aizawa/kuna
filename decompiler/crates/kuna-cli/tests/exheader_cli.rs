@@ -11,6 +11,7 @@ fn code_image() -> Vec<u8> {
     for (i, w) in words.iter().chain(&[0, 0, 0, 0]).chain(&close_handle).enumerate() {
         image[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
+    image[0x40..0x44].copy_from_slice(&[0x07, 0x20, 0x70, 0x47]);
     image
 }
 
@@ -93,4 +94,20 @@ fn exheader_names_supervisor_calls() {
     ]);
     assert_eq!(status, 0, "{stderr}");
     assert!(stdout.contains("software_interrupt(0x23)"), "{stdout}");
+}
+
+#[test]
+fn an_odd_address_decodes_that_function_as_thumb() {
+    let code = write("3ds-code-thumb", &code_image());
+    let header = write("3ds-exheader-thumb", &exheader(0x20));
+    let sp = specs();
+    let (stdout, stderr, status) =
+        common::run_kuna(&["decompile", &code, "0x100041", "--exheader", &header, "--sleighpath", &sp]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("return 7;"), "{stdout}");
+
+    let (stdout, _, _) = common::run_kuna(&[
+        "decompile", &code, "0x100041", "--exheader", &header, "--option", "rawthumb", "off", "--sleighpath", &sp,
+    ]);
+    assert!(!stdout.contains("return 7;"), "{stdout}");
 }

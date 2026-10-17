@@ -1130,11 +1130,13 @@ the header's `.text` address, and declares `.text` and `.rodata` read-only so
 literal-pool loads fold to the globals they name. `.data` stays writable. It also
 turns `--option ctrsvc on` (unless you pass `ctrsvc` yourself), which names the
 supervisor calls by their libctru wrapper (`svcCloseHandle(handle)`) and models the
-registers each reads and writes. With no
+registers each reads and writes, and `--option rawthumb on`, which decodes a function
+addressed with its Thumb bit set (`kuna decompile code.bin 0x100097 ...`) as Thumb
+while the rest of the image stays A32. With no
 `--addr`/`--entry`, `decompile-all` and `functions` seed discovery at the `.text`
 start. An explicit `--target` or `--isa` wins; a `--base` that differs from the
 header is an error, as is a header whose segments are not contiguous or longer than
-the image. BSS and per-function ARM/Thumb are not handled yet.
+the image. BSS is not mapped yet.
 
 ```bash
 kuna decompile code.bin 0x10ec60 --exheader exheader.bin

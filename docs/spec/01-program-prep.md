@@ -6495,6 +6495,18 @@ the C++ inheritance chain modeled by composition:
   and `functions` seed discovery at the `.text` start when no entry is given. BSS is not
   mapped.
 
+  `option rawthumb` (default off; `--exheader` turns it on) lets an odd entry of a
+  headerless ARM32 image start Thumb code. `bootstrap_from_raw` records each odd entry,
+  as its even byte address, when the image-wide mode is ARM. At the commit,
+  `paint_raw_thumb_seeds` walks each one with the entry-reachable walk of
+  `entrythumbflow` (`decompiler/crates/kuna-analysis/src/listing/kuna_entrythumbflow.rs`)
+  and paints exactly the instruction ranges that walk decodes as Thumb. The paints are
+  written to the context database at once, so the discovery that follows decodes those
+  bytes as Thumb, and replayed after the image-wide mode at the commit, so an odd entry
+  outranks `--isa`. A walk that hits its 4096-instruction budget publishes what it
+  painted and says so once. An even entry, an image decoded wholly as Thumb, and a
+  non-ARM target are untouched.
+
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header
 (with the compiler-model fallback retry), runs `build_engine_and_init`, attaches

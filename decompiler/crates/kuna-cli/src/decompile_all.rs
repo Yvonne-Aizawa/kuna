@@ -2685,6 +2685,9 @@ pub(crate) fn parse_args_with_filters(
         if !options.iter().any(|(name, _)| name == "ctrsvc") {
             options.push(("ctrsvc".into(), "on".into()));
         }
+        if !options.iter().any(|(name, _)| name == "rawthumb") {
+            options.push(("rawthumb".into(), "on".into()));
+        }
     }
 
     if raw_image {

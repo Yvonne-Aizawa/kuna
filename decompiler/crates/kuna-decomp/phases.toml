@@ -7109,6 +7109,28 @@ live_true = "on"
 live_false = "off"
 
 [[settable]]
+option = "rawthumb"
+values = "on|off"
+default = "off"
+destructive = false
+phase = "P1"
+subphase = "code-data-partition"
+strength = "HARD"
+rewind = "P1"
+issue = "kuna-analysis-rawthumb"
+summary = "Let an odd entry of a headerless 32-bit ARM image select Thumb for the function it starts. A raw image has no symbols or mapping markers, so its decode mode is the single `--isa` for the whole file, and an odd entry address (the ARM interworking convention for a Thumb function) was normalized to the even byte address and decoded in that one mode: `kuna decompile fw.bin 0x100097 --raw-image ... --isa arm` printed `halt_baddata()` for a Thumb function. On, each odd entry (and, with `--exheader`, an odd positional address) is walked as Thumb by the same entry-reachable walk `entrythumbflow` uses for a TE entry, and only the instruction ranges that walk decodes are painted Thumb, so the A32 code around it keeps the image mode. The walk follows fall-through, direct branches and mode-preserving `bl`; an interworking `blx` target keeps the mode its own encoding selects. A walk that reaches its 4096-instruction budget publishes what it painted and says so once."
+use_when = "A raw ARM32 image mixing A32 and Thumb code, where a function you address with its Thumb bit (an odd pointer from a vtable or callback table, or a `blx` target) decompiles as `halt_baddata()` or garbage under `--isa arm`. Off by default because it changes what an odd address means on a raw image, which was documented to be normalized; `--exheader` turns it on. Does nothing for an even entry, an image decoded wholly as Thumb with `--isa thumb`, or a non-ARM target."
+example = "option rawthumb on"
+source_decompiler = "kuna"
+inspiration = "Pokemon X code.bin: Thumb functions such as 0x100096 (a bsearch-style helper) reached by blx from A32 code; the odd words in its vtables"
+change_kind = "analysis-enablement"
+tier = "analysis"
+symptoms = "a raw arm function addressed with its thumb bit decompiles to halt_baddata|a thumb function in a raw image decodes as garbage a32|function pointers with the low bit set are normalized and decoded in the wrong mode|--isa arm and --isa thumb each decode half of a mixed raw image"
+live_field = "analysis_rawthumb"
+live_true = "on"
+live_false = "off"
+
+[[settable]]
 option = "gopclntab"
 values = "on|off"
 default = "on"

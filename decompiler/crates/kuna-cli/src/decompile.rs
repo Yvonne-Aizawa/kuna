@@ -975,6 +975,10 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             options.push(("ctrsvc".into(), "on".into()));
             forwarded.extend(["--option".into(), "ctrsvc".into(), "on".into()]);
         }
+        if !options.iter().any(|(name, _)| name == "rawthumb") {
+            options.push(("rawthumb".into(), "on".into()));
+            forwarded.extend(["--option".into(), "rawthumb".into(), "on".into()]);
+        }
     }
 
     if raw_image {
