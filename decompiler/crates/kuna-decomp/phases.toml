@@ -7150,6 +7150,25 @@ tier = "analysis"
 symptoms = "most virtual methods of a raw c++ image are missing from the function list|a virtual call goes through a vtable slot with no method to open|functions reached only through a callback table are never discovered|a raw image has far fewer functions than its vtables point to"
 
 [[settable]]
+option = "crorelocs"
+values = "on|off"
+default = "on"
+destructive = false
+phase = "P1"
+subphase = "external-refinement"
+strength = "HARD"
+rewind = "P1"
+issue = "kuna-analysis-crorelocs"
+summary = "Apply a Nintendo 3DS CRO module's relocations when it is mapped. RO patches a module's words at load time, and on disk they are zero, so a jump table is five zero words (`*(base + state*4 + 800)()` and no case bodies) and a call through an imported pointer is anonymous. On, the internal relocations (`R_ARM_ABS32` and its relatives) point each patched word at its segment plus addend, which fills the table, and the import relocations point each patched word at a four-byte `bx lr` stub, one per import, placed after `.bss` and named `import_<module>_<offset>`; a thunk `ldr pc,[pc,#n]` through such a word takes the import's name. Off maps the module as it is on disk. A load-time gate: read from the environment while the module is mapped, so `kuna` sets it for the process it loads in."
+use_when = "A `.cro` or `.crs` file. On by default; flip it off only to compare against the module as stored, or if a relocation of a kind this loader reads differently from RO damages a word. Does nothing for any other input."
+example = "option crorelocs off"
+source_decompiler = "kuna"
+inspiration = "3dbrew CRO0 format; DllDialogCommon.cro, whose switch at file 0x318 has five zero table words filled by internal relocations with addends 436, 596, 616, 644 and 688"
+change_kind = "analysis-enablement"
+tier = "analysis"
+symptoms = "a 3ds cro jump table is zeros and the case bodies are unreachable|a switch prints as *(base + state*4 + 800)() in a cro|calls through a cro's imported pointers are anonymous|a patched word in a cro reads as zero"
+
+[[settable]]
 option = "gopclntab"
 values = "on|off"
 default = "on"

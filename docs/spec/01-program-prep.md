@@ -6524,6 +6524,27 @@ the C++ inheritance chain modeled by composition:
   pointer is taken. A note reports the count found once.
   `--exheader` passes `.text` as the code range and `.rodata` and `.data` as the scans.
 
+- `decompiler/crates/kuna-analysis/src/loadimage_cro.rs (CroLoadImage)` loads a Nintendo
+  3DS CRO/CRS module, recognised by `CRO0`, `FIXD` or `CRS0` at file offset 0x80. The
+  module is mapped at address 0, so addresses are file offsets: each segment of its table
+  is mapped at its file offset under its type's permissions (`.text` executable and
+  read-only, `.rodata` read-only, `.data` writable), `.bss` zero filled after the file, and
+  a block of four-byte `bx lr` stubs after `.bss`, one per import. With `option crorelocs`
+  on (default, a load-time gate read from `KUNA_CRORELOCS`) the relocations RO applies at
+  load are applied to the mapped bytes: each internal one points a patched word at its
+  referred segment plus addend (`R_ARM_ABS32`/`TARGET1`, `REL32`, `PREL31`, `CALL`,
+  `JUMP24`, `THM_PC22`), and each import's patch list points its words at the import's stub,
+  named `import_<module>_<offset>` (named imports keep their own name). A thunk `ldr
+  pc,[pc,#n]` through such a word takes the import's name too, so a call to it reads as a call
+  to the import. Named exports and the `OnLoad`/`OnExit`/`OnUnresolved`/`nnroControlObject_`
+  hooks become named entries. The program is a raw-container program: `bootstrap_from_cro`
+  seeds the code symbols and the headerless-image discovery (`rawdiscover`, `rawthumb`)
+  runs over the executable segment only. Off, or with a relocation type the loader does not
+  read, the words stay as stored. On `DllDialogCommon.cro` this fills the five-word jump table
+  of the switch at file 0x318 and the one in `nnroControlObject_`, and names 100 symbols.
+  Not handled: a load address other than 0, compressed or encrypted modules, the export
+  trie, and resolving anonymous imports to addresses in the static module.
+
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header
 (with the compiler-model fallback retry), runs `build_engine_and_init`, attaches

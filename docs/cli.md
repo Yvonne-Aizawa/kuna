@@ -1121,6 +1121,16 @@ half-open range is rejected. Duplicate entries collapse. ARM32 raw input require
 even byte address before validation. Other addresses retain every input bit, so
 an odd ARM data or property address still selects the odd byte.
 
+### Nintendo 3DS `.cro` modules
+
+A `.cro` (or `.crs`) file loads without flags: `kuna decompile Module.cro nnroControlObject_`.
+The module is mapped at address 0, so addresses are file offsets; its segments get their
+permissions and `.bss` is zero filled; its exports are named; and its relocations are
+applied (`--option crorelocs off` maps it as stored), which fills jump tables and points
+imported-function words at named stubs (`import_static_2b284(...)` for an import of the game
+at offset 0x2b284). Not supported yet: another load address and resolving the imports to
+names in `code.bin`.
+
 ### Nintendo 3DS `.code` images
 
 `--exheader <exheader.bin>` loads a decrypted, decompressed ExeFS `.code` file as a

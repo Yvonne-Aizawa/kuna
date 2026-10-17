@@ -499,6 +499,8 @@ pub struct ConsoleProgram {
     /// (kuna `rawthumb`) Odd entries of a headerless 32-bit ARM image, as the
     /// even addresses the walk starts from, until the commit paints them Thumb.
     raw_thumb_seeds: Vec<u64>,
+    /// (kuna CRO) Names the loader gave entries, keyed by byte address.
+    entry_names: BTreeMap<u64, String>,
     /// (kuna `rawthumb`) The Thumb ranges those seeds' walks painted, replayed
     /// after the image-wide mode so the odd entry's mode outranks it.
     raw_thumb_paints: Vec<kuna_analysis::pass::ContextPaint>,
@@ -2661,7 +2663,11 @@ impl ConsoleProgram {
             let symbols = entries
                 .into_iter()
                 .map(|addr| ProgramSymbol {
-                    name: self.arch().name_function(&addr),
+                    name: self
+                        .entry_names
+                        .get(&addr.get_offset())
+                        .cloned()
+                        .unwrap_or_else(|| self.arch().name_function(&addr)),
                     addr,
                     object_location: None,
                     binding: None,
@@ -3807,6 +3813,7 @@ fn empty_program(
         pending_analysis: Vec::new(),
         pending_entry_thumb: None,
         raw_thumb_seeds: Vec::new(),
+        entry_names: BTreeMap::new(),
         raw_thumb_paints: Vec::new(),
         table_thumb_roots: Vec::new(),
         table_arm_roots: Vec::new(),
@@ -3988,6 +3995,8 @@ pub fn bootstrap_from_image_with_isa(
 ) -> KunaResult<ConsoleProgram> {
     if file_is_te_image(path) {
         bootstrap_from_te(path, target, spec_roots, isa)
+    } else if file_is_cro_module(path) {
+        bootstrap_from_cro(path, target, spec_roots, isa)
     } else {
         bootstrap_from_object_with_isa(path, target, spec_roots, isa)
     }
@@ -4007,6 +4016,65 @@ pub fn bootstrap_from_image(
         .map_err(KunaError::lowlevel)?
         .flatten();
     bootstrap_from_image_with_isa(path, target, spec_roots, isa)
+}
+
+fn file_is_cro_module(path: &str) -> bool {
+    use std::io::Read;
+    let mut prefix = vec![0u8; 0x138];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut prefix))
+        .map(|()| kuna_analysis::loadimage_cro::is_cro(&prefix))
+        .unwrap_or(false)
+}
+
+/// Bootstrap a Nintendo 3DS CRO/CRS module: segments mapped at their file
+/// offsets, the module's relocations applied, its exports and import stubs named.
+/// The result is a raw-container program, so the headerless-image discovery
+/// (`rawdiscover`, `rawthumb`) runs over its executable segment.
+pub fn bootstrap_from_cro(
+    path: &str,
+    target: &str,
+    spec_roots: &[String],
+    isa: Option<ArmIsa>,
+) -> KunaResult<ConsoleProgram> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| KunaError::lowlevel(format!("cannot read {path}: {e}")))?;
+    let registry = build_registry();
+    let mut loader = kuna_analysis::loadimage_cro::CroLoadImage::from_bytes(path, &bytes)?;
+    let arch_type = String::from_utf8_lossy(&loader.get_arch_type()).into_owned();
+    let mut sleigh = build_sleigh_for_loader(path, target, spec_roots, &registry, &arch_type, None)?;
+    let code_space = default_code_space(&sleigh)?;
+    loader.attach_to_space(Rc::clone(&code_space));
+    let arch_id = sleigh.arch_id().to_string();
+    let executable = loader.executable_ranges();
+    let symbols = loader.symbols().to_vec();
+    let readonly_ranges = loader_readonly_ranges(&loader, sleigh.base().unwrap().manage());
+    sleigh.base_mut().unwrap().set_loader(Box::new(loader));
+    let mode = if is_arm32_language(&arch_id) { isa.or(Some(ArmIsa::Arm)) } else { None };
+    let input_context_paints = install_input_isa(
+        sleigh.base_mut().unwrap(),
+        &arch_id,
+        &code_space,
+        &executable,
+        mode,
+        isa.is_some(),
+    )?;
+    let description = sleigh.base().unwrap().get_description().to_string();
+    let mut program = empty_program(sleigh, registry, ProgramContainer::Raw, description);
+    let mut seeds: Vec<u64> = symbols.iter().filter(|s| s.code).map(|s| s.addr).collect();
+    if seeds.is_empty() {
+        seeds.extend(executable.iter().map(|&(start, _)| start).take(1));
+    }
+    seeds.sort_unstable();
+    seeds.dedup();
+    program.pending_synthetic_entries =
+        seeds.iter().map(|&vma| Address::new(Rc::clone(&code_space), vma)).collect();
+    program.entry_names = symbols.iter().filter(|s| s.code).map(|s| (s.addr, s.name.clone())).collect();
+    program.pending_analysis = input_isa_stash(input_context_paints);
+    program.analysis_code_space = Some(code_space);
+    program.raw_address_units = Some((1, is_arm32_language(&arch_id)));
+    apply_readonly_ranges(&mut program, &readonly_ranges);
+    Ok(program)
 }
 
 /// Whether the file at `path` opens as a UEFI TE, reading only the bytes the
@@ -5478,6 +5546,15 @@ pub fn bootstrap_from_file(
             .map_err(KunaError::lowlevel)?
             .flatten();
         return bootstrap_from_te_bytes(path, &bytes, target, spec_roots, isa);
+    }
+    if kuna_analysis::loadimage_cro::is_cro(&bytes) {
+        let isa = std::env::var(ARM_ISA_ENV)
+            .ok()
+            .map(|value| ArmIsa::parse(&value))
+            .transpose()
+            .map_err(KunaError::lowlevel)?
+            .flatten();
+        return bootstrap_from_cro(path, target, spec_roots, isa);
     }
     if is_object_binary(&bytes) {
         // Real object-format binary (ELF / PE / Mach-O / COFF): drive the

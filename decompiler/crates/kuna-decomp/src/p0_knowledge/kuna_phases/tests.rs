@@ -38,13 +38,13 @@ fn surface_count_is_120() {
 }
 
 #[test]
-fn settable_count_is_317() {
-    assert_eq!(kuna_num_settables(), 317);
-    assert_eq!(SETTABLE_TABLE.len(), 317);
+fn settable_count_is_318() {
+    assert_eq!(kuna_num_settables(), 318);
+    assert_eq!(SETTABLE_TABLE.len(), 318);
 }
 
 #[test]
-fn tier_counts_are_115_core_120_transform_82_analysis() {
+fn tier_counts_are_115_core_120_transform_83_analysis() {
     let mut core = 0;
     let mut transform = 0;
     let mut analysis = 0;
@@ -56,7 +56,7 @@ fn tier_counts_are_115_core_120_transform_82_analysis() {
             other => panic!("invalid tier {other:?} on {}", s.option),
         }
     }
-    assert_eq!((core, transform, analysis), (115, 120, 82));
+    assert_eq!((core, transform, analysis), (115, 120, 83));
 }
 
 #[test]
@@ -532,6 +532,10 @@ fn option_values_live_value_present_for_110() {
         // the analysis COMMIT boundary, so it has no codegen live_value and no
         // on/off form to report.
         "rawvtables",
+        // (kuna) 3DS CRO relocations -- a LOAD-time gate read from the
+        // `KUNA_CRORELOCS` env var while the module is mapped, so like
+        // `typedepth` it has no codegen live_value. Default-on.
+        "crorelocs",
     ];
     let mut with_live = 0;
     for i in 0..kuna_num_settables() {
@@ -1036,8 +1040,8 @@ fn emit_catalog_json_static_form_brackets_and_commas() {
     // +1 for `bytearrayc`; its P9 row sits mid-table.
     // +2 for `wideslice` and `devectorize`.
     // +1 for `addrtakenentry`; its P1 row sits mid-table beside `thunkentry`.
-    // +1 for `ctrsvc`, +1 for `rawthumb`, +1 for `rawvtables`.
-    assert_eq!(json.matches("},\n").count(), 316);
+    // +1 for `ctrsvc`, +1 for `rawthumb`, +1 for `rawvtables`, +1 for `crorelocs`.
+    assert_eq!(json.matches("},\n").count(), 317);
 }
 
 #[test]

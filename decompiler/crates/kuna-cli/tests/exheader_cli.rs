@@ -166,3 +166,26 @@ fn disassemble_reads_a_code_image_and_specs_lists_targets() {
     assert_eq!(status, 0, "{stderr}");
     assert!(stdout.lines().any(|line| line == "ARM:LE:32:v6"), "{stdout}");
 }
+
+#[test]
+fn a_cro_module_loads_with_its_relocations_and_names() {
+    let module = write("cro-module", &kuna_analysis::loadimage_cro::synthetic::module());
+    let sp = specs();
+    let run = |extra: &[&str]| {
+        let mut args = vec!["decompile", module.as_str(), "Export", "--sleighpath", sp.as_str()];
+        args.extend(extra);
+        let (stdout, stderr, status) = common::run_kuna(&args);
+        assert_eq!(status, 0, "{stderr}");
+        stdout
+    };
+    let relocated = run(&[]);
+    for value in ["return 10;", "return 0x14;", "return 0x1e;", "return 99;"] {
+        assert!(relocated.contains(value), "{value}: {relocated}");
+    }
+    let raw = run(&["--option", "crorelocs", "off"]);
+    assert!(!raw.contains("return 0x14;"), "{raw}");
+
+    let (stdout, stderr, status) = common::run_kuna(&["functions", &module, "--json", "--sleighpath", &sp]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("\"name\": \"Export\"") && stdout.contains("import_static_123"), "{stdout}");
+}

@@ -760,6 +760,10 @@ Three tiers:
 | a virtual call goes through a vtable slot with no method to open | [`rawvtables`](#rawvtables) |
 | functions reached only through a callback table are never discovered | [`rawvtables`](#rawvtables) |
 | a raw image has far fewer functions than its vtables point to | [`rawvtables`](#rawvtables) |
+| a 3ds cro jump table is zeros and the case bodies are unreachable | [`crorelocs`](#crorelocs) |
+| a switch prints as *(base + state*4 + 800)() in a cro | [`crorelocs`](#crorelocs) |
+| calls through a cro's imported pointers are anonymous | [`crorelocs`](#crorelocs) |
+| a patched word in a cro reads as zero | [`crorelocs`](#crorelocs) |
 | stripped go binary renders sub_<addr> instead of main.main and runtime.* names | [`gopclntab`](#gopclntab) |
 | go package function names missing | [`gopclntab`](#gopclntab) |
 | objective-c methods render as sub_<addr> instead of -[Class sel] | [`objc`](#objc) |
@@ -2819,6 +2823,14 @@ Program-prep enablement: what is discovered, decoded, and named before any funct
 - **When to flip:** A raw ARM32 image of a C++ program (a 3DS `code.bin`) whose `functions` count is far below the number of methods, or whose decompiled callers end in `(*(code *)(*obj + 0x14))(obj)` with no method to open. Supply the ranges of the vtable-holding data (`.rodata`, `.data`); `--exheader` supplies them for you. Off by default because it names ranges only the caller knows and changes the function inventory. Does nothing outside a headerless ARM32 image.
 - **Where / provenance:** P1/code-data-partition · kuna · analysis-enablement · kuna-analysis-rawvtables
 - **Example:** `option rawvtables 0x100000+0x43c000:0x53c000+0x6a000,0x5a6000+0x45000`
+
+### `crorelocs` -- on | off, default `on`
+
+- **Symptoms:** a 3ds cro jump table is zeros and the case bodies are unreachable; a switch prints as *(base + state*4 + 800)() in a cro; calls through a cro's imported pointers are anonymous; a patched word in a cro reads as zero.
+- **What it does:** Apply a Nintendo 3DS CRO module's relocations when it is mapped. RO patches a module's words at load time, and on disk they are zero, so a jump table is five zero words (`*(base + state*4 + 800)()` and no case bodies) and a call through an imported pointer is anonymous. On, the internal relocations (`R_ARM_ABS32` and its relatives) point each patched word at its segment plus addend, which fills the table, and the import relocations point each patched word at a four-byte `bx lr` stub, one per import, placed after `.bss` and named `import_<module>_<offset>`; a thunk `ldr pc,[pc,#n]` through such a word takes the import's name. Off maps the module as it is on disk. A load-time gate: read from the environment while the module is mapped, so `kuna` sets it for the process it loads in.
+- **When to flip:** A `.cro` or `.crs` file. On by default; flip it off only to compare against the module as stored, or if a relocation of a kind this loader reads differently from RO damages a word. Does nothing for any other input.
+- **Where / provenance:** P1/external-refinement · kuna · analysis-enablement · kuna-analysis-crorelocs
+- **Example:** `option crorelocs off`
 
 ### `gopclntab` -- on | off, default `on`
 

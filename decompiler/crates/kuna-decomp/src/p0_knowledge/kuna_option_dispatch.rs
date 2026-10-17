@@ -1102,6 +1102,11 @@ kuna_options! { self, p1;
             if val { "on" } else { "off" }
         ))
     },
+    "crorelocs" => {
+        let val = on_or_off(p1)?;
+        crate::kuna_crorelocs::set_crorelocs_env(val);
+        Ok(format!("CRO relocations turned {}", if val { "on" } else { "off" }))
+    },
     "callfixup" => on_off!(analysis_callfixup, "Call-fixup analysis pass"),
     "addrtable" => on_off!(analysis_addrtable, "Address-table analysis pass"),
     "operand_refs" => on_off!(analysis_operand_refs, "Scalar/operand reference-markup pass"),
