@@ -18,8 +18,7 @@ loaded with `--raw-image`.
 
 ## Proposed behaviour
 
-1. Detect an ExeFS `.code` image from a sibling `exheader.bin` (or an `--exheader`
-   path) and map it with the segment table: `.text` executable and read-only,
+1. Take an `--exheader` path (or a sibling `exheader.bin`) for a `.code` image and map it with the segment table: `.text` executable and read-only,
    `.rodata` read-only, `.data` writable, then a zero-filled BSS of the declared
    size. Base and ranges come from the exheader, not from flags.
 2. Name the `svc` numbers with their libctru/Horizon names.
@@ -27,8 +26,10 @@ loaded with `--raw-image`.
 4. Mark ARM versus Thumb per function from the interworking bit instead of one
    image-wide `--isa`.
 
-Out of scope: `.cia`/`.cci`/`.3dsx` container parsing, `.cro` modules, encrypted
-images, SDK library naming.
+Input is a decrypted, decompressed `.code` file plus its `exheader.bin`. Out of
+scope: decryption, `.code` decompression, `.cia`/`.cci`/`.3dsx` container parsing,
+raw ExeFS container parsing, `.cro` modules, SDK library naming, and other Horizon
+targets (the Switch is a separate feature).
 
 ## Shape
 
@@ -45,6 +46,5 @@ images, SDK library naming.
 
 ## Open questions
 
-- Accept the `.code` file plus a separate exheader, or also read a raw ExeFS
-  container so users do not have to extract it first?
-- Should `svc` naming be a shared table usable by other Horizon-family targets?
+- Pass the exheader as a sibling `exheader.bin` found automatically, or only via an
+  explicit `--exheader` path?
