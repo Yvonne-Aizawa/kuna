@@ -1063,6 +1063,7 @@ pub(crate) fn parse_args(argv: &[String]) -> Result<DisArgs, String> {
             "--base" => base = Some(parse_addr(&take(argv, &mut i, "--base")?)?),
             "--entry" => entries.push(parse_addr(&take(argv, &mut i, "--entry")?)?),
             "--exheader" => exheader = Some(take(argv, &mut i, "--exheader")?),
+            "--symbols" => crate::args::use_symbols(&take(argv, &mut i, "--symbols")?)?,
             "--slice" => slice = Some(take(argv, &mut i, "--slice")?),
             "--target" => target = Some(take(argv, &mut i, "--target")?),
             "--sleighpath" => sleighpath = Some(take(argv, &mut i, "--sleighpath")?),
@@ -1156,7 +1157,7 @@ fn usage() {
          \x20                    [--mode auto|reliable|aggressive|fast] \\\n\
          \x20                    [--define-function S[-E][=N]|@FILE].. \\\n\
          \x20                    [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D] \\\n\
-         \x20                    [--exheader FILE | --raw-image --target T --base VMA [--entry VMA].. [--isa arm|thumb]]\n\
+         \x20                    [--symbols FILE] [--exheader FILE | --raw-image --target T --base VMA [--entry VMA].. [--isa arm|thumb]]\n\
          \n\
          The target is a function name, an address (--addr for a bare hex one), or an\n\
          explicit range (0x1000-0x1040 / 0x1000..0x1040) for bytes no function owns.\n\

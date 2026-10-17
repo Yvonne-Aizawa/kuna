@@ -53,6 +53,7 @@ pub mod pass;
 pub mod passes;
 pub mod loadimage_object;
 pub mod loadimage_cro;
+pub mod symbolnames;
 pub mod loadimage_te;
 pub mod loader;
 pub mod analyzers;

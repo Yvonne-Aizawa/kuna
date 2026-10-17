@@ -28,6 +28,10 @@ use crate::loader::le::read_u32;
 /// The SLEIGH language of a 3DS module (the ARM11).
 pub const ARCH: &str = "ARM:LE:32:v6:default";
 
+/// Where 3DS titles load their static module (`code.bin`), the base an anonymous
+/// import's segment offset is read against for `--symbols`.
+pub const STATIC_MODULE_BASE: u64 = 0x10_0000;
+
 const HEADER: usize = 0x80;
 const HEADER_END: usize = 0x138;
 const ABSENT: u32 = 0xffff_ffff;
@@ -219,6 +223,8 @@ impl CroLoadImage {
             }
         }
 
+        let supplied: std::collections::HashMap<u64, String> =
+            crate::symbolnames::from_env().into_iter().collect();
         let mut stubs: Vec<(String, u64)> = Vec::new();
         let mut code_pointers: Vec<u64> = Vec::new();
         if relocate {
@@ -278,7 +284,10 @@ impl CroLoadImage {
                 for i in 0..anon_n.min(0x10000) {
                     let target = rd.u32(anon_at + 8 * i)?;
                     let name = if target & 0xf == 0 {
-                        format!("import_{module_name}_{:x}", target >> 4)
+                        supplied
+                            .get(&(STATIC_MODULE_BASE + u64::from(target >> 4)))
+                            .cloned()
+                            .unwrap_or_else(|| format!("import_{module_name}_{:x}", target >> 4))
                     } else {
                         format!("import_{module_name}_{}_{:x}", target & 0xf, target >> 4)
                     };
@@ -304,6 +313,18 @@ impl CroLoadImage {
                         symbols.push(CroSymbol { name: name.clone(), addr: at as u64, code: true });
                     }
                 }
+            }
+        }
+
+        for (addr, name) in &supplied {
+            if let Some(symbol) = symbols.iter_mut().find(|s| s.addr == *addr) {
+                symbol.name = name.clone();
+            } else if module
+                .segments
+                .iter()
+                .any(|s| s.kind == TYPE_TEXT && *addr >= u64::from(s.offset) && *addr < u64::from(s.offset + s.size))
+            {
+                symbols.push(CroSymbol { name: name.clone(), addr: *addr, code: true });
             }
         }
 

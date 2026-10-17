@@ -28,3 +28,12 @@ pub(crate) fn take_option(argv: &[String], i: &mut usize) -> Result<(String, Str
     *i += 2;
     Ok((name.clone(), value.clone()))
 }
+
+/// `--symbols FILE`: check the file and hand its path to the loaders through
+/// [`kuna_analysis::symbolnames::SYMBOLS_ENV`].
+pub(crate) fn use_symbols(path: &str) -> Result<(), String> {
+    let absolute = std::fs::canonicalize(path).map_err(|e| format!("--symbols {path}: {e}"))?;
+    kuna_analysis::symbolnames::read(&absolute).map_err(|e| format!("--symbols: {e}"))?;
+    std::env::set_var(kuna_analysis::symbolnames::SYMBOLS_ENV, absolute);
+    Ok(())
+}

@@ -876,6 +876,7 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             "--raw-image" => raw_image = true,
             "--base" => base = Some(parse_cli_address(&take_value(argv, &mut i, "--base")?)?),
             "--exheader" => exheader = Some(take_value(argv, &mut i, "--exheader")?),
+            "--symbols" => crate::args::use_symbols(&take_value(argv, &mut i, "--symbols")?)?,
             "--regions" => regions = true,
             "--slice" => slice = Some(take_value(argv, &mut i, "--slice")?),
             "--isa" => {
@@ -1083,7 +1084,7 @@ fn usage() {
          \x20                     [--assert DIRECTIVE|@FILE].. [--assert-strict] \\\n\
          \x20                     [--isa auto|arm|thumb] [--slice ARCH] [--target T] \\\n\
          \x20                     [--sleighpath D] [--decomp-dbg P] [--max-fn-memory MiB]\n\
-         \x20                     [--exheader FILE | --raw-image --target T --base VMA]\n\
+         \x20                     [--symbols FILE] [--exheader FILE | --raw-image --target T --base VMA]\n\
          \n\
          Decompile ONE function.  The target is a name, or an address with --addr\n\
          (a `0x`-prefixed target implies it); an address inside another function is\n\

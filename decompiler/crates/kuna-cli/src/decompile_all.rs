@@ -2648,6 +2648,7 @@ pub(crate) fn parse_args_with_filters(
             "--raw-image" => raw_image = true,
             "--base" => base = Some(parse_hex(&take(argv, &mut i, "--base")?)?),
             "--exheader" => exheader = Some(take(argv, &mut i, "--exheader")?),
+            "--symbols" => crate::args::use_symbols(&take(argv, &mut i, "--symbols")?)?,
             "--target" => target = Some(take(argv, &mut i, "--target")?),
             "--sleighpath" => sleighpath = Some(take(argv, &mut i, "--sleighpath")?),
             "-h" | "--help" => {
@@ -2893,7 +2894,7 @@ fn usage_decompile_all() {
          \x20                   [--reachable-from <name|0xaddr>] [--sort addr|size|name] [--limit N] \\\n\
          \x20                   [--summary] [--define-function S[-E][=N]|@FILE].. \\\n\
          \x20                   [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
-         \x20                   [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
+         \x20                   [--symbols FILE] [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
          \n\
          Decompile every CODE-backed function in one in-process load (load-once,\n\
          decompile-many).  --json emits {{binary,count,functions:[{{name,address,code,variables,..}}]}};\n\
@@ -2953,7 +2954,7 @@ fn usage_functions() {
          \x20               [--reachable-from <name|0xaddr>] [--sort addr|size|name] [--limit N] \\\n\
          \x20               [--define-function S[-E][=N]|@FILE].. [--jobs N|auto] \\\n\
          \x20               [--mode auto|reliable|aggressive|fast] [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
-         \x20               [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
+         \x20               [--symbols FILE] [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
          \n\
          List every function kuna discovers in a binary as `<addr>\\t<name>` (or\n\
          --json: {{binary,count,total,functions:[{{name,address,address_hex,aliases,size}}]}}).\n\

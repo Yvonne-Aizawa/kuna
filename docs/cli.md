@@ -1121,6 +1121,17 @@ half-open range is rejected. Duplicate entries collapse. ARM32 raw input require
 even byte address before validation. Other addresses retain every input bit, so
 an odd ARM data or property address still selects the odd byte.
 
+### `--symbols FILE`
+
+Names addresses from a file of `<address> <name>` lines (either order; spaces, commas, `=`
+or `|` between; `#` and `//` comments; `0x12b284 gfl::Alloc` or `gfl::Alloc = 0x12b284`).
+On a headerless raw image it names the function at that address and starts one there. On a
+3DS `.cro` module an address below the static module base names the function in the module
+(a file offset), and an address at or above `0x100000` is read as an address in `code.bin`:
+it renames the import that module has of that address, so `import_static_2b284` becomes the
+name you gave to `0x12b284`. Elsewhere (ELF, PE) use `--define-function`. A file with no
+usable lines is an error.
+
 ### Nintendo 3DS `.cro` modules
 
 A `.cro` (or `.crs`) file loads without flags: `kuna decompile Module.cro nnroControlObject_`.

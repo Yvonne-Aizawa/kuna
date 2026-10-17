@@ -6549,8 +6549,12 @@ the C++ inheritance chain modeled by composition:
   with the Thumb bit set is decoded as Thumb through `rawthumb`, which a CRO program turns on.
   This is what ends a function at the next method: `sub_43c` of `DllDialogCommon.cro` is 0x14c
   bytes, not the 1220 that ran on to 0x900.
+  `--symbols FILE` (`kuna_analysis::symbolnames`, read from the `KUNA_SYMBOLS` variable the
+  CLI sets) supplies names: an anonymous import takes the name given to its address in the
+  static module (`0x100000` plus its segment offset), and a module address names the entry
+  there; a headerless raw image names the function at an address inside it the same way.
   Not handled: a load address other than 0, compressed or encrypted modules, the export
-  trie, and resolving anonymous imports to addresses in the static module.
+  trie, and reading the static module's own names from `code.bin`.
 
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header

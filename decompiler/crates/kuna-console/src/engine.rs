@@ -4010,6 +4010,15 @@ pub fn bootstrap_from_raw(
     prog.analysis_code_space = Some(code_space);
     prog.raw_address_units = Some((word_size, arm32));
     prog.raw_thumb_seeds = thumb_seeds;
+    let names_space = prog.analysis_code_space.clone().expect("raw program keeps its code space");
+    for (addr, name) in kuna_analysis::symbolnames::from_env() {
+        if addr >= image_base && addr < image_end {
+            if !prog.pending_synthetic_entries.iter().any(|a| a.get_offset() == addr) {
+                prog.pending_synthetic_entries.push(Address::new(Rc::clone(&names_space), addr));
+            }
+            prog.entry_names.insert(addr, name);
+        }
+    }
     Ok(prog)
 }
 
