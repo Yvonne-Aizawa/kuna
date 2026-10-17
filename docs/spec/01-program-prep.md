@@ -6482,6 +6482,19 @@ the C++ inheritance chain modeled by composition:
   parse failures retain the headerless-image command guidance even when the first byte
   is `<`.
 
+  `--exheader <file>` (`decompiler/crates/kuna-cli/src/exheader.rs`) is a CLI-side
+  shorthand for a Nintendo 3DS ExeFS `.code` image and adds no loader. It reads the
+  three code-segment records of the NCCH extended header (address, page count, byte
+  size) and rejects a header whose `.rodata` does not start where `.text`'s pages end,
+  whose `.data` does not start where `.rodata`'s pages end, whose segment sizes exceed
+  their pages, or whose extent is longer than the image. It then fills the raw-image
+  request: target `ARM:LE:32:v6:default`, ARM state, base at the `.text` address, and a
+  `readonly` range over the page extents of `.text` and `.rodata` so literal-pool loads
+  fold to the globals they name. `.data` stays writable. An explicit target or ISA wins
+  over those defaults and a conflicting base is refused. `decompile-all`, `decompile-project`
+  and `functions` seed discovery at the `.text` start when no entry is given. BSS is not
+  mapped.
+
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header
 (with the compiler-model fallback retry), runs `build_engine_and_init`, attaches

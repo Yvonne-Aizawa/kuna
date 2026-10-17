@@ -1121,6 +1121,23 @@ half-open range is rejected. Duplicate entries collapse. ARM32 raw input require
 even byte address before validation. Other addresses retain every input bit, so
 an odd ARM data or property address still selects the odd byte.
 
+### Nintendo 3DS `.code` images
+
+`--exheader <exheader.bin>` loads a decrypted, decompressed ExeFS `.code` file as a
+raw image whose layout comes from the NCCH extended header. It implies
+`--raw-image`, targets `ARM:LE:32:v6:default`, uses `--isa arm`, bases the image at
+the header's `.text` address, and declares `.text` and `.rodata` read-only so
+literal-pool loads fold to the globals they name. `.data` stays writable. With no
+`--addr`/`--entry`, `decompile-all` and `functions` seed discovery at the `.text`
+start. An explicit `--target` or `--isa` wins; a `--base` that differs from the
+header is an error, as is a header whose segments are not contiguous or longer than
+the image. BSS, `svc` names and per-function ARM/Thumb are not handled yet.
+
+```bash
+kuna decompile code.bin 0x10ec60 --exheader exheader.bin
+kuna functions code.bin --exheader exheader.bin --json
+```
+
 Raw images carry no symbols, so there is no object-backed discovery tier to
 run; `--option rawdiscover off` leaves the inventory at the explicit seeds.
 On (the default) `rawdiscover` sweeps the executable bytes for direct call

@@ -863,6 +863,7 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
     let mut isa: Option<ArmIsa> = None;
     let mut raw_image = false;
     let mut base: Option<u64> = None;
+    let mut exheader: Option<String> = None;
     let mut max_fn_memory: Option<u64> = None;
 
     let mut i = 0;
@@ -874,6 +875,7 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
             "--raw" => raw = true,
             "--raw-image" => raw_image = true,
             "--base" => base = Some(parse_cli_address(&take_value(argv, &mut i, "--base")?)?),
+            "--exheader" => exheader = Some(take_value(argv, &mut i, "--exheader")?),
             "--regions" => regions = true,
             "--slice" => slice = Some(take_value(argv, &mut i, "--slice")?),
             "--isa" => {
@@ -957,6 +959,19 @@ pub fn main(argv: &[String]) -> Result<i32, String> {
         std::env::set_var("KUNA_ENGINE", e);
     }
     addr |= looks_like_addr(&target);
+
+    if let Some(path) = &exheader {
+        let layout = crate::exheader::read(path, &binary)?;
+        for spec in crate::exheader::apply(&layout, &mut bfd_target, &mut base, &mut isa, &mut assertions)? {
+            forwarded.push("--assert".into());
+            forwarded.push(spec);
+        }
+        if !forwarded.iter().any(|f| f == "--isa") {
+            forwarded.push("--isa".into());
+            forwarded.push(isa.map_or("auto", ArmIsa::as_str).into());
+        }
+        raw_image = true;
+    }
 
     if raw_image {
         if bfd_target
@@ -1055,7 +1070,7 @@ fn usage() {
          \x20                     [--assert DIRECTIVE|@FILE].. [--assert-strict] \\\n\
          \x20                     [--isa auto|arm|thumb] [--slice ARCH] [--target T] \\\n\
          \x20                     [--sleighpath D] [--decomp-dbg P] [--max-fn-memory MiB]\n\
-         \x20                     [--raw-image --target T --base VMA]\n\
+         \x20                     [--exheader FILE | --raw-image --target T --base VMA]\n\
          \n\
          Decompile ONE function.  The target is a name, or an address with --addr\n\
          (a `0x`-prefixed target implies it); an address inside another function is\n\

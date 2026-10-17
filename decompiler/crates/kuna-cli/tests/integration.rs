@@ -113,6 +113,9 @@ mod ctypes_per_arch;
 #[path = "decompile_cli.rs"]
 mod decompile_cli;
 
+#[path = "exheader_cli.rs"]
+mod exheader_cli;
+
 #[path = "decompile_graph_cli.rs"]
 mod decompile_graph_cli;
 
