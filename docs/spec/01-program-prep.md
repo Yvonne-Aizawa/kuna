@@ -6542,6 +6542,13 @@ the C++ inheritance chain modeled by composition:
   runs over the executable segment only. Off, or with a relocation type the loader does not
   read, the words stay as stored. On `DllDialogCommon.cro` this fills the five-word jump table
   of the switch at file 0x318 and the one in `nnroControlObject_`, and names 100 symbols.
+  With `option crofuncptrs` on (default), every internal `ABS32`/`TARGET1` relocation whose
+  target is in the code segment and whose patched place is not (a vtable or callback-table
+  word, where a jump table or literal pool sits in the code segment itself) starts a function
+  at that target (`CroLoadImage::code_pointers`, seeded by `seed_cro_code_pointers`); a target
+  with the Thumb bit set is decoded as Thumb through `rawthumb`, which a CRO program turns on.
+  This is what ends a function at the next method: `sub_43c` of `DllDialogCommon.cro` is 0x14c
+  bytes, not the 1220 that ran on to 0x900.
   Not handled: a load address other than 0, compressed or encrypted modules, the export
   trie, and resolving anonymous imports to addresses in the static module.
 

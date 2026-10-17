@@ -499,6 +499,8 @@ pub struct ConsoleProgram {
     /// (kuna `rawthumb`) Odd entries of a headerless 32-bit ARM image, as the
     /// even addresses the walk starts from, until the commit paints them Thumb.
     raw_thumb_seeds: Vec<u64>,
+    /// (kuna `crofuncptrs`) A CRO module's code pointers, held until the commit.
+    cro_code_pointers: Vec<u64>,
     /// (kuna CRO) Names the loader gave entries, keyed by byte address.
     entry_names: BTreeMap<u64, String>,
     /// (kuna `rawthumb`) The Thumb ranges those seeds' walks painted, replayed
@@ -2505,6 +2507,34 @@ impl ConsoleProgram {
         }
     }
 
+    /// (kuna `crofuncptrs`) Start a function at each code pointer a CRO's
+    /// relocations name; a Thumb one also becomes a `rawthumb` seed.
+    fn seed_cro_code_pointers(&mut self) {
+        let pointers = std::mem::take(&mut self.cro_code_pointers);
+        if pointers.is_empty() || !self.arch().analysis_crofuncptrs {
+            return;
+        }
+        let Some(code_space) = self.analysis_code_space.clone() else {
+            return;
+        };
+        let thumb_on = self.arch().analysis_rawthumb;
+        let known: BTreeSet<u64> =
+            self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
+        for pointer in pointers {
+            let thumb = pointer & 1 == 1;
+            let vma = pointer & !1;
+            if thumb && !thumb_on {
+                continue;
+            }
+            if !known.contains(&vma) {
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+            }
+            if thumb {
+                self.raw_thumb_seeds.push(vma);
+            }
+        }
+    }
+
     /// (kuna `rawvtables`) Add the function pointers the image's tables hold to
     /// the entries, and the Thumb ones to the `rawthumb` seeds when that is on.
     fn seed_raw_vtables(&mut self) {
@@ -2647,6 +2677,7 @@ impl ConsoleProgram {
     /// defensively re-gated facts merge into the same `merged` output committed
     /// below. With Listing off, this whole block is skipped.
     pub fn commit_pending_analysis(&mut self) -> KunaResult<()> {
+        self.seed_cro_code_pointers();
         self.seed_raw_vtables();
         self.paint_raw_thumb_seeds()?;
         if !self.pending_synthetic_entries.is_empty() {
@@ -3813,6 +3844,7 @@ fn empty_program(
         pending_analysis: Vec::new(),
         pending_entry_thumb: None,
         raw_thumb_seeds: Vec::new(),
+        cro_code_pointers: Vec::new(),
         entry_names: BTreeMap::new(),
         raw_thumb_paints: Vec::new(),
         table_thumb_roots: Vec::new(),
@@ -4048,8 +4080,10 @@ pub fn bootstrap_from_cro(
     let arch_id = sleigh.arch_id().to_string();
     let executable = loader.executable_ranges();
     let symbols = loader.symbols().to_vec();
+    let code_pointers = loader.code_pointers().to_vec();
     let readonly_ranges = loader_readonly_ranges(&loader, sleigh.base().unwrap().manage());
     sleigh.base_mut().unwrap().set_loader(Box::new(loader));
+    sleigh.base_mut().unwrap().analysis_rawthumb = true;
     let mode = if is_arm32_language(&arch_id) { isa.or(Some(ArmIsa::Arm)) } else { None };
     let input_context_paints = install_input_isa(
         sleigh.base_mut().unwrap(),
@@ -4070,6 +4104,7 @@ pub fn bootstrap_from_cro(
     program.pending_synthetic_entries =
         seeds.iter().map(|&vma| Address::new(Rc::clone(&code_space), vma)).collect();
     program.entry_names = symbols.iter().filter(|s| s.code).map(|s| (s.addr, s.name.clone())).collect();
+    program.cro_code_pointers = code_pointers;
     program.pending_analysis = input_isa_stash(input_context_paints);
     program.analysis_code_space = Some(code_space);
     program.raw_address_units = Some((1, is_arm32_language(&arch_id)));

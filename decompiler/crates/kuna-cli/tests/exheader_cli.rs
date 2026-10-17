@@ -179,7 +179,7 @@ fn a_cro_module_loads_with_its_relocations_and_names() {
         stdout
     };
     let relocated = run(&[]);
-    for value in ["return 10;", "return 0x14;", "return 0x1e;", "return 99;"] {
+    for value in ["sub_240()", "return 0x14;", "return 0x1e;", "return 99;"] {
         assert!(relocated.contains(value), "{value}: {relocated}");
     }
     let raw = run(&["--option", "crorelocs", "off"]);
@@ -188,4 +188,19 @@ fn a_cro_module_loads_with_its_relocations_and_names() {
     let (stdout, stderr, status) = common::run_kuna(&["functions", &module, "--json", "--sleighpath", &sp]);
     assert_eq!(status, 0, "{stderr}");
     assert!(stdout.contains("\"name\": \"Export\"") && stdout.contains("import_static_123"), "{stdout}");
+}
+
+#[test]
+fn a_cro_code_pointer_outside_the_code_starts_a_function() {
+    let module = write("cro-pointer", &kuna_analysis::loadimage_cro::synthetic::module());
+    let sp = specs();
+    let list = |extra: &[&str]| {
+        let mut args = vec!["functions", module.as_str(), "--json", "--sleighpath", sp.as_str()];
+        args.extend(extra);
+        let (stdout, stderr, status) = common::run_kuna(&args);
+        assert_eq!(status, 0, "{stderr}");
+        stdout
+    };
+    assert!(list(&[]).contains("\"address_hex\": \"0x240\""));
+    assert!(!list(&["--option", "crofuncptrs", "off"]).contains("\"address_hex\": \"0x240\""));
 }

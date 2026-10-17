@@ -59,6 +59,7 @@ pub struct CroLoadImage {
     filename: String,
     sections: Vec<Section>,
     symbols: Vec<CroSymbol>,
+    code_pointers: Vec<u64>,
     spaceid: Option<Rc<AddrSpace>>,
     cursection: Cell<usize>,
 }
@@ -219,6 +220,7 @@ impl CroLoadImage {
         }
 
         let mut stubs: Vec<(String, u64)> = Vec::new();
+        let mut code_pointers: Vec<u64> = Vec::new();
         if relocate {
             let (rel_at, rel_n) = (rd.u32(H_INTERNAL_RELOCS)? as usize, rd.u32(H_INTERNAL_RELOCS + 4)? as usize);
             for i in 0..rel_n.min(0x100000) {
@@ -226,6 +228,11 @@ impl CroLoadImage {
                 let (place, kind, seg, addend) = (rd.u32(at)?, bytes[at + 4], bytes[at + 5], rd.u32(at + 8)? as i32);
                 if let Some(target) = module.base_of(usize::from(seg)) {
                     module.apply(place, kind, target, addend);
+                    let into_text = module.segments.get(usize::from(seg)).map(|s| s.kind) == Some(TYPE_TEXT);
+                    let from_text = module.kind_at(place) == Some(TYPE_TEXT);
+                    if matches!(kind, R_ABS32 | R_TARGET1) && into_text && !from_text {
+                        code_pointers.push(target.wrapping_add(addend as i64 as u64));
+                    }
                 }
             }
 
@@ -341,6 +348,7 @@ impl CroLoadImage {
             filename: filename.to_string(),
             sections,
             symbols,
+            code_pointers,
             spaceid: None,
             cursection: Cell::new(0),
         })
@@ -353,6 +361,12 @@ impl CroLoadImage {
     /// The exports and import stubs, with their addresses.
     pub fn symbols(&self) -> &[CroSymbol] {
         &self.symbols
+    }
+
+    /// Where a relocation outside the code points into it: a vtable or callback
+    /// table word, so the start of a function. The Thumb bit, if set, is kept.
+    pub fn code_pointers(&self) -> &[u64] {
+        &self.code_pointers
     }
 
     /// `(start, size)` of each executable section.
@@ -462,7 +476,8 @@ impl LoadImage for CroLoadImage {
 /// at 0x310; an export at TEXT+0x14; a thunk at TEXT that is `ldr pc,[pc,#8]` through the
 /// patched word at TEXT+0x10 (one anonymous import); the export at TEXT+0x14 is `cmp r0,#3; ldrcc pc,[pc,r0,lsl #2]`
 /// over a jump table at TEXT+0x20 of three zero words that internal relocations point at
-/// TEXT+0x30, 0x34 and 0x38, each a branch to a `mov r0,#10/20/30; bx lr` body.
+/// TEXT+0x30, 0x34 and 0x38, each a branch to a `mov r0,#10/20/30; bx lr` body; and a word at the start of `.rodata`
+/// relocated to TEXT+0x40, a code pointer from outside the code.
 #[doc(hidden)]
 pub mod synthetic {
     pub const TEXT: usize = 0x200;
@@ -501,7 +516,7 @@ pub mod synthetic {
         put(&mut image, 0x110, 0x480);
         put(&mut image, 0x114, 1);
         put(&mut image, 0x128, 0x4a0);
-        put(&mut image, 0x12c, 3);
+        put(&mut image, 0x12c, 4);
         for (i, (offset, size, kind)) in [(TEXT as u32, 0x60u32, 0u32), (0x300, 0x10, 1), (0x310, 0x10, 2)].iter().enumerate() {
             put(&mut image, 0x400 + 12 * i, *offset);
             put(&mut image, 0x400 + 12 * i + 4, *size);
@@ -541,6 +556,7 @@ pub mod synthetic {
         for (i, addend) in [0x30u32, 0x34, 0x38].iter().enumerate() {
             reloc(&mut image, 0x4a0 + 12 * i, (0x20 + 4 * i as u32) << 4, 0, 0, *addend);
         }
+        reloc(&mut image, 0x4a0 + 36, 1, 0, 0, 0x40);
         image
     }
 }
@@ -566,6 +582,13 @@ mod tests {
         let stub = image.symbols().iter().find(|s| s.name == "import_static_123" && s.addr >= 0x1020).unwrap();
         assert_eq!(u64::from(word(&image, text + 0x10)), stub.addr);
         assert!(image.symbols().iter().any(|s| s.name == "import_static_123" && s.addr == text));
+    }
+
+    #[test]
+    fn a_relocated_word_outside_the_code_is_a_code_pointer_and_a_jump_table_is_not() {
+        let image = CroLoadImage::build("m.cro", &synthetic::module(), true).unwrap();
+        assert_eq!(image.code_pointers(), &[0x240]);
+        assert!(CroLoadImage::build("m.cro", &synthetic::module(), false).unwrap().code_pointers().is_empty());
     }
 
     #[test]

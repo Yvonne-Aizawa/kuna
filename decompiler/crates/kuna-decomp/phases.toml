@@ -7169,6 +7169,28 @@ tier = "analysis"
 symptoms = "a 3ds cro jump table is zeros and the case bodies are unreachable|a switch prints as *(base + state*4 + 800)() in a cro|calls through a cro's imported pointers are anonymous|a patched word in a cro reads as zero"
 
 [[settable]]
+option = "crofuncptrs"
+values = "on|off"
+default = "on"
+destructive = false
+phase = "P1"
+subphase = "code-data-partition"
+strength = "HARD"
+rewind = "P1"
+issue = "kuna-analysis-crofuncptrs"
+summary = "Start a function at every code address a CRO module's relocations point to from outside its code. A method reached only through a vtable has no caller to name it, so the module's function list stopped at its exports and the direct-call closure: `sub_43c` of DllDialogCommon.cro came back as 1220 bytes (the 305 instructions up to 0x900) when the function is 0x14c, because the entries at 0x588, 0x5e4, 0x638 and the rest were never found. The vtables are in `.rodata` and `.data`, and every word in them that holds a function address is an internal relocation (`R_ARM_ABS32`/`TARGET1`) whose target is in the code segment and whose patched place is not: a jump table or literal pool lives in the code segment itself and is left alone. On, each such target becomes an entry; one with the Thumb bit set is decoded as Thumb through `rawthumb`, which is on for a CRO. Needs `crorelocs` on, since the relocations are what name the pointers."
+use_when = "A `.cro` whose function sizes run on into the next function or whose virtual methods are missing from `kuna functions`. Off restores the exports-and-calls inventory. Does nothing for any other input."
+example = "option crofuncptrs off"
+source_decompiler = "kuna"
+inspiration = "DllDialogCommon.cro: 28 relocated vtable words name the function starts at 0x588, 0x5e4, 0x638, 0x688, 0x6c4, 0x7a4, 0x7f0, 0x840, 0x8d0 and 0x8fc, none of which the call sweep found"
+change_kind = "analysis-enablement"
+tier = "analysis"
+symptoms = "a cro function is reported far larger than it is and runs on into its neighbours|virtual methods of a cro module are missing from the function list|a function size extends to the next known function across several unlisted ones"
+live_field = "analysis_crofuncptrs"
+live_true = "on"
+live_false = "off"
+
+[[settable]]
 option = "gopclntab"
 values = "on|off"
 default = "on"

@@ -959,6 +959,7 @@ kuna_options! { self, p1;
         self.raw_vtables = spec;
         Ok(msg)
     },
+    "crofuncptrs" => on_off!(analysis_crofuncptrs, "CRO relocation-found function starts"),
     "rawthumb" => on_off!(analysis_rawthumb, "Thumb mode for odd raw-image entries"),
     "mips_gp" => on_off!(analysis_mips_gp, "MIPS $gp-recovery (t9 tracking) pass"),
     "i386_pie_plt" => {
