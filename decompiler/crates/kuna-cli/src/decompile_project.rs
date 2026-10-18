@@ -151,7 +151,7 @@ fn usage() {
          \x20                   [--jobs N|auto] [--jobs-chunk N] [--jobs-full-load] [--stream] \\\n\
          \x20                   [--define-function S[-E][=N]|@FILE].. \\\n\
          \x20                   [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
-         \x20                   [--raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
+         \x20                   [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
          \n\
          Decompile a whole binary in one in-process load and write a project folder\n\
          (default `<binary-filename>.kuna/` next to the binary; -o DIR overrides):\n\

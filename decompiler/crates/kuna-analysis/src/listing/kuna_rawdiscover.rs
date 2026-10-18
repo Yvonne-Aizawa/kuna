@@ -59,31 +59,104 @@ pub fn discover(
     exec_ranges: &[(u64, u64)],
     seeds: &[u64],
 ) -> Vec<u64> {
+    discover_with_tables(arch, translate, code_space, exec_ranges, seeds, &[], &[]).found
+}
+
+/// What [`discover_with_tables`] found.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TableDiscovery {
+    /// Every function entry, as [`discover`] returns them, plus the kept A32
+    /// table roots and the direct-call closure of those.
+    pub found: Vec<u64>,
+    /// The A32 table pointers kept as entries.
+    pub arm: Vec<u64>,
+    /// The Thumb table pointers kept; the caller decodes them in their mode.
+    pub thumb: Vec<u64>,
+}
+
+/// [`discover`] with function pointers read from the image's tables.
+///
+/// A table word is also a flag, a count or a jump-table entry, so a pointer
+/// into the middle of code the descent from the seeds and call targets alone
+/// has decoded is not an entry. Only a pointer outside that code, or at an
+/// entry the descent already found, is kept. The kept A32 pointers then join a
+/// second descent; the Thumb ones are returned for the caller to decode in Thumb
+/// mode, which this walk cannot.
+pub fn discover_with_tables(
+    arch: &Architecture,
+    translate: &dyn Translate,
+    code_space: &Rc<AddrSpace>,
+    exec_ranges: &[(u64, u64)],
+    seeds: &[u64],
+    arm_candidates: &[u64],
+    thumb_candidates: &[u64],
+) -> TableDiscovery {
     if seeds.is_empty() || exec_ranges.is_empty() {
-        return seeds.to_vec();
+        return TableDiscovery { found: seeds.to_vec(), ..TableDiscovery::default() };
     }
     let mut roots: Vec<u64> = seeds.to_vec();
     roots.extend(sweep_call_targets(translate, code_space, exec_ranges));
     roots.sort_unstable();
     roots.dedup();
 
-    // One descent over the union of the seeds and the swept roots. Only the
-    // function partition is read back, so the disassembly text and the
-    // reference model are not built.
+    let (first, covered) = descend(arch, translate, code_space, exec_ranges, seeds, &roots);
+    let inside = |vma: u64| {
+        let at = covered.partition_point(|&(_, end)| end <= vma);
+        covered.get(at).is_some_and(|&(start, _)| start <= vma)
+    };
+    let keep = |list: &[u64]| -> Vec<u64> {
+        list.iter()
+            .copied()
+            .filter(|vma| !inside(*vma) || first.binary_search(vma).is_ok())
+            .collect()
+    };
+    let arm = keep(arm_candidates);
+    let thumb = keep(thumb_candidates);
+    let found = if arm.is_empty() {
+        first
+    } else {
+        let mut widened = roots;
+        widened.extend(arm.iter().copied());
+        widened.sort_unstable();
+        widened.dedup();
+        let mut seeded = seeds.to_vec();
+        seeded.extend(arm.iter().copied());
+        descend(arch, translate, code_space, exec_ranges, &seeded, &widened).0
+    };
+    TableDiscovery { found, arm, thumb }
+}
+
+/// One descent over `roots`: the entries it yields (plus `seeds`) and the merged
+/// `(start, end)` byte ranges it decoded as instructions.
+fn descend(
+    arch: &Architecture,
+    translate: &dyn Translate,
+    code_space: &Rc<AddrSpace>,
+    exec_ranges: &[(u64, u64)],
+    seeds: &[u64],
+    roots: &[u64],
+) -> (Vec<u64>, Vec<(u64, u64)>) {
     let listing = Listing::build_raw(
         arch,
         translate,
         code_space,
         exec_ranges,
-        &roots,
+        roots,
         ListingDetail::PARTITION_ONLY,
     );
-
     let mut out: Vec<u64> = seeds.to_vec();
     out.extend(listing.functions().map(|(&vma, _)| vma));
     out.sort_unstable();
     out.dedup();
-    out
+    let mut covered: Vec<(u64, u64)> = Vec::new();
+    for (&addr, insn) in listing.instructions() {
+        let end = addr.saturating_add(u64::from(insn.len));
+        match covered.last_mut() {
+            Some(last) if addr <= last.1 => last.1 = last.1.max(end),
+            _ => covered.push((addr, end)),
+        }
+    }
+    (out, covered)
 }
 
 /// Decode `exec_ranges` end to end and return the target of every direct call.

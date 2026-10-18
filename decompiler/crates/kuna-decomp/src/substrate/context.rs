@@ -1337,6 +1337,11 @@ pub struct ArchContext {
     /// its setup registers and write its result?  Read by
     /// [`ActionSyscallRegs`](crate::p2_lift::kuna_syscallregs::ActionSyscallRegs).
     pub syscall_regs: bool,
+    /// (kuna `ctrsvc`) Nintendo 3DS supervisor calls are named and modelled.
+    pub ctr_svc: bool,
+    /// (kuna `syscallregs`) The generic per-OS register model is selected, as
+    /// opposed to `ctrsvc` alone turning `syscall_regs` on.
+    pub syscall_regs_generic: bool,
     /// (kuna) The processor family of the loaded language, when `syscallregs`
     /// models it.
     pub syscall_regs_family: Option<crate::p2_lift::kuna_syscallregs::SyscallFamily>,
@@ -1928,6 +1933,8 @@ impl ArchContext {
             x64_syscall_memory_target: false,
             x64_syscall_userops: Vec::new(),
             syscall_regs: false,
+            ctr_svc: false,
+            syscall_regs_generic: false,
             syscall_regs_family: None,
             syscall_regs_userops: Vec::new(),
             peb_names: false,

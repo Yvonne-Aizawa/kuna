@@ -1861,7 +1861,7 @@ fn apply_one_option(prog: &mut ConsoleProgram, name: &str, value: &str) -> Resul
 
 /// The SLEIGH spec roots (an explicit `--sleighpath` wins, else `SLEIGHHOME` +
 /// the repo `specs/`), matching `kuna fid`'s resolution.
-fn spec_roots(sleighpath: Option<&str>) -> Vec<String> {
+pub(crate) fn spec_roots(sleighpath: Option<&str>) -> Vec<String> {
     let mut roots: Vec<String> = Vec::new();
     if let Some(p) = sleighpath.filter(|s| !s.is_empty()) {
         roots.push(p.to_string());
@@ -2503,6 +2503,7 @@ pub(crate) fn parse_args_with_filters(
     let mut isa: Option<ArmIsa> = None;
     let mut raw_image = false;
     let mut base: Option<u64> = None;
+    let mut exheader: Option<String> = None;
     let mut saw_entry = false;
     let mut saw_language = false;
     let mut jobs: usize = 1;
@@ -2646,6 +2647,7 @@ pub(crate) fn parse_args_with_filters(
             "--isa" => isa = ArmIsa::parse(&take(argv, &mut i, "--isa")?)?,
             "--raw-image" => raw_image = true,
             "--base" => base = Some(parse_hex(&take(argv, &mut i, "--base")?)?),
+            "--exheader" => exheader = Some(take(argv, &mut i, "--exheader")?),
             "--target" => target = Some(take(argv, &mut i, "--target")?),
             "--sleighpath" => sleighpath = Some(take(argv, &mut i, "--sleighpath")?),
             "-h" | "--help" => {
@@ -2670,12 +2672,33 @@ pub(crate) fn parse_args_with_filters(
 
     let binary = binary.ok_or_else(|| format!("{cmd} requires <binary>"))?;
 
+    if let Some(path) = &exheader {
+        if cmd == "decompile-graph" {
+            return Err("--exheader is not supported by decompile-graph".into());
+        }
+        let layout = crate::exheader::read(path, &binary)?;
+        crate::exheader::apply(&layout, &mut target, &mut base, &mut isa, &mut assertions)?;
+        if addrs.is_empty() && entry_seeds.is_empty() && names.is_none() {
+            entry_seeds.push(EntrySelector::Numeric(layout.base()));
+        }
+        raw_image = true;
+        if !options.iter().any(|(name, _)| name == "ctrsvc") {
+            options.push(("ctrsvc".into(), "on".into()));
+        }
+        if !options.iter().any(|(name, _)| name == "rawthumb") {
+            options.push(("rawthumb".into(), "on".into()));
+        }
+        if !options.iter().any(|(name, _)| name == "rawvtables") {
+            options.push(("rawvtables".into(), crate::exheader::rawvtables_value(&layout)));
+        }
+    }
+
     if raw_image {
         if cmd == "decompile-graph" {
             return Err("--raw-image is not supported by decompile-graph".into());
         }
         if target.as_deref().is_none_or(|value| value.trim().is_empty()) {
-            return Err("--raw-image requires --target <SLEIGH-language-id>".into());
+            return Err("--raw-image requires --target <SLEIGH-language-id> (see `kuna specs --list-targets`)".into());
         }
         if base.is_none() {
             return Err("--raw-image requires --base <address>".into());
@@ -2870,7 +2893,7 @@ fn usage_decompile_all() {
          \x20                   [--reachable-from <name|0xaddr>] [--sort addr|size|name] [--limit N] \\\n\
          \x20                   [--summary] [--define-function S[-E][=N]|@FILE].. \\\n\
          \x20                   [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
-         \x20                   [--raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
+         \x20                   [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
          \n\
          Decompile every CODE-backed function in one in-process load (load-once,\n\
          decompile-many).  --json emits {{binary,count,functions:[{{name,address,code,variables,..}}]}};\n\
@@ -2930,7 +2953,7 @@ fn usage_functions() {
          \x20               [--reachable-from <name|0xaddr>] [--sort addr|size|name] [--limit N] \\\n\
          \x20               [--define-function S[-E][=N]|@FILE].. [--jobs N|auto] \\\n\
          \x20               [--mode auto|reliable|aggressive|fast] [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
-         \x20               [--raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
+         \x20               [--exheader FILE | --raw-image --target T --base VMA (--entry|--addr VMA)..]\n\
          \n\
          List every function kuna discovers in a binary as `<addr>\\t<name>` (or\n\
          --json: {{binary,count,total,functions:[{{name,address,address_hex,aliases,size}}]}}).\n\

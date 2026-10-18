@@ -6482,6 +6482,48 @@ the C++ inheritance chain modeled by composition:
   parse failures retain the headerless-image command guidance even when the first byte
   is `<`.
 
+  `--exheader <file>` (`decompiler/crates/kuna-cli/src/exheader.rs`) is a CLI-side
+  shorthand for a Nintendo 3DS ExeFS `.code` image and adds no loader. It reads the
+  three code-segment records of the NCCH extended header (address, page count, byte
+  size) and rejects a header whose `.rodata` does not start where `.text`'s pages end,
+  whose `.data` does not start where `.rodata`'s pages end, whose segment sizes exceed
+  their pages, or whose extent is longer than the image. It then fills the raw-image
+  request: target `ARM:LE:32:v6:default`, ARM state, base at the `.text` address, and a
+  `readonly` range over the page extents of `.text` and `.rodata` so literal-pool loads
+  fold to the globals they name. `.data` stays writable. An explicit target or ISA wins
+  over those defaults and a conflicting base is refused. `decompile-all`, `decompile-project`
+  and `functions` seed discovery at the `.text` start when no entry is given. BSS is not
+  mapped.
+
+  `option rawthumb` (default off; `--exheader` turns it on) lets an odd entry of a
+  headerless ARM32 image start Thumb code. `bootstrap_from_raw` records each odd entry,
+  as its even byte address, when the image-wide mode is ARM. At the commit,
+  `paint_raw_thumb_seeds` walks each one with the entry-reachable walk of
+  `entrythumbflow` (`decompiler/crates/kuna-analysis/src/listing/kuna_entrythumbflow.rs`)
+  and paints exactly the instruction ranges that walk decodes as Thumb. The paints are
+  written to the context database at once, so the discovery that follows decodes those
+  bytes as Thumb, and replayed after the image-wide mode at the commit, so an odd entry
+  outranks `--isa`. A walk that hits its 4096-instruction budget publishes what it
+  painted and says so once. An even entry, an image decoded wholly as Thumb, and a
+  non-ARM target are untouched.
+
+  `option rawvtables` (default off; `--exheader` supplies it) seeds the functions a
+  headerless ARM32 image's data tables point to. Its value names the code range pointers
+  must land in and the data ranges to read (`decompiler/crates/kuna-decomp/src/p1_partition/kuna_rawvtables.rs`,
+  `<code>:<scan>[,<scan>...]`, each `<start>+<size>` in hex). `seed_raw_vtables` reads the
+  image file at the commit and takes every run of three or more consecutive 32-bit words
+  whose targets, with the Thumb bit cleared, lie in the code range: an even word-aligned
+  target is an A32 entry, an odd one a Thumb entry, and a halfword-aligned even target,
+  an outside target or a zero ends the run. A table word is also a flag, a count or a
+  jump-table entry, so the pointers are checked against the code the descent has
+  decoded (`kuna_rawdiscover::discover_with_tables`): one that falls inside that code,
+  at an address that is not an entry the descent found, is dropped. The kept A32
+  pointers join a second descent as seeds; the kept Thumb ones join the `rawthumb`
+  seeds and are skipped when that option is off, since they would decode in the wrong
+  mode. With `rawdiscover` off there is no descent to check against, and every
+  pointer is taken. A note reports the count found once.
+  `--exheader` passes `.text` as the code range and `.rodata` and `.data` as the scans.
+
 The real-binary path of §1.2 is the fourth binding, console-side: `bootstrap_from_object`
 plays the leaf role itself — it resolves the language from the object header
 (with the compiler-model fallback retry), runs `build_engine_and_init`, attaches

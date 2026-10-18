@@ -95,7 +95,7 @@ use crate::context::{BlockId, OpId};
 use crate::funcdata::Funcdata;
 use crate::kuna_x64syscall::overlaps;
 use crate::op::{pcodeop_flags, PcodeOpBank};
-use crate::userop::BUILTIN_SYSCALL_ERROR;
+use crate::userop::{BUILTIN_SVC_OUT, BUILTIN_SYSCALL_ERROR};
 use crate::varnode::VarnodeBank;
 
 /// How many basic blocks one register's walk may visit before it gives up and
@@ -274,7 +274,8 @@ fn is_syscall(data: &Funcdata, op: OpId) -> bool {
     else {
         return false;
     };
-    u32::try_from(index).is_ok_and(|i| data.get_arch().syscall_regs_userops.contains(&i))
+    u32::try_from(index)
+        .is_ok_and(|i| data.get_arch().syscall_regs_userops.contains(&i) || ctr::is_builtin(i))
 }
 
 /// Is `op` the `syscall_error()` this pass placed after a system call?
@@ -288,7 +289,11 @@ pub fn is_error_flag_op(obank: &PcodeOpBank, vbank: &VarnodeBank, op: OpId) -> b
         o.code() == OpCode::CPUI_CALLOTHER
             && o.get_in(0)
                 .and_then(|v| vbank.get(v))
-                .is_some_and(|v| v.is_constant() && v.get_offset() == BUILTIN_SYSCALL_ERROR as u64)
+                .is_some_and(|v| {
+                    v.is_constant()
+                        && (v.get_offset() == BUILTIN_SYSCALL_ERROR as u64
+                            || v.get_offset() == BUILTIN_SVC_OUT as u64)
+                })
     })
 }
 
@@ -660,9 +665,21 @@ impl Action for ActionSyscallRegs {
         let Some(regs) = resolve(data, family) else {
             return 0;
         };
+        let ctr_svc = data.get_arch().ctr_svc;
+        let generic = data.get_arch().syscall_regs_generic;
         let mut changed = 0;
         for op in found {
-            if rewrite(data, op, &regs).is_ok() {
+            let known = ctr_svc
+                .then(|| ctr::immediate(data, op).and_then(ctr::entry))
+                .flatten();
+            let done = match known {
+                Some((number, _, outputs, inputs)) => {
+                    ctr::rewrite(data, op, &regs, number, outputs, inputs)
+                }
+                None if generic => rewrite(data, op, &regs),
+                None => continue,
+            };
+            if done.is_ok() {
                 changed = 1;
             }
         }
@@ -757,7 +774,10 @@ pub fn userop_ids(
         .unwrap_or_default()
 }
 
+mod ctr;
 mod mips_args;
+
+pub use ctr::{builtin_ids as ctr_builtin_ids, builtin_name as ctr_builtin_name};
 
 #[cfg(test)]
 mod tests;

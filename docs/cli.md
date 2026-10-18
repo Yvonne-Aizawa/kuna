@@ -1121,6 +1121,35 @@ half-open range is rejected. Duplicate entries collapse. ARM32 raw input require
 even byte address before validation. Other addresses retain every input bit, so
 an odd ARM data or property address still selects the odd byte.
 
+### Nintendo 3DS `.code` images
+
+`--exheader <exheader.bin>` loads a decrypted, decompressed ExeFS `.code` file as a
+raw image whose layout comes from the NCCH extended header. It implies
+`--raw-image`, targets `ARM:LE:32:v6:default`, uses `--isa arm`, bases the image at
+the header's `.text` address, and declares `.text` and `.rodata` read-only so
+literal-pool loads fold to the globals they name. `.data` stays writable. It also
+turns `--option ctrsvc on` (unless you pass `ctrsvc` yourself), which names the
+supervisor calls by their libctru wrapper (`svcCloseHandle(handle)`) and models the
+registers each reads and writes, and `--option rawthumb on`, which decodes a function
+addressed with its Thumb bit set (`kuna decompile code.bin 0x100097 ...`) as Thumb
+while the rest of the image stays A32, and `--option rawvtables`, which seeds the
+functions that runs of code pointers in `.rodata` and `.data` name. With no
+`--addr`/`--entry`, `decompile-all` and `functions` seed discovery at the `.text`
+start. An explicit `--target` or `--isa` wins; a `--base` that differs from the
+header is an error, as is a header whose segments are not contiguous or longer than
+the image. BSS is not mapped yet.
+
+```bash
+kuna decompile code.bin 0x10ec60 --exheader exheader.bin
+kuna functions code.bin --exheader exheader.bin --json
+```
+
+A 32-bit ARM raw image has no mode marker, so it also needs `--isa arm` or `--isa thumb`
+(`--exheader` supplies `arm`). `kuna specs --list-targets [WORD]` prints the language ids
+`--target` takes, filtered by `WORD`. `disassemble` and `read` take the same
+`--raw-image --target T --base VMA [--entry VMA]..`, and `--exheader`, as the other
+commands; with no `--entry` the listed address seeds discovery.
+
 Raw images carry no symbols, so there is no object-backed discovery tier to
 run; `--option rawdiscover off` leaves the inventory at the explicit seeds.
 On (the default) `rawdiscover` sweeps the executable bytes for direct call

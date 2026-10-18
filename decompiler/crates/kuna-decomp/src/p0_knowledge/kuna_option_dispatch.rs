@@ -165,6 +165,7 @@ kuna_options! { self, p1;
         self.syscall_regs = mode;
         Ok(msg)
     },
+    "ctrsvc" => on_off!(ctr_svc, "Nintendo 3DS supervisor-call naming"),
     "pebnames" => {
         let (mode, msg) = crate::kuna_pebnames::OptionPebNames.apply(p1)?;
         self.peb_names = mode;
@@ -949,6 +950,16 @@ kuna_options! { self, p1;
     "entrythumbflow" => {
         on_off!(analysis_entrythumbflow, "Entry-reachable Thumb context walk")
     },
+    "rawvtables" => {
+        let spec = crate::kuna_rawvtables::parse(p1)?;
+        let msg = match &spec {
+            Some(s) => format!("Raw-image pointer tables read from {} range(s)", s.scans.len()),
+            None => "Raw-image pointer tables turned off".to_string(),
+        };
+        self.raw_vtables = spec;
+        Ok(msg)
+    },
+    "rawthumb" => on_off!(analysis_rawthumb, "Thumb mode for odd raw-image entries"),
     "mips_gp" => on_off!(analysis_mips_gp, "MIPS $gp-recovery (t9 tracking) pass"),
     "i386_pie_plt" => {
         let val = on_or_off(p1)?;

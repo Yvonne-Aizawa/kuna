@@ -1,7 +1,7 @@
 {
   "data_footer": [
-    3055,
-    3055
+    3062,
+    3062
   ],
   "passing": [
     "data:64-bit logical shift retains unsigned destination",
@@ -371,6 +371,13 @@
     "data:CPSR: register control write keeps NZCVQ",
     "data:CPSR: two helpers return the incoming IRQ bit",
     "data:CPSR: writes retain architectural side effects",
+    "data:CTRSVC #1: with option ctrsvc on the handle is closed by a named call that reads r0",
+    "data:CTRSVC #2: the handle svcCreateMutex writes to r1 is the call's output",
+    "data:CTRSVC #2b: the returned value is the call's r1 output",
+    "data:CTRSVC #3: svcMapMemoryBlock reads r0..r3 and no more",
+    "data:CTRSVC #4: a number outside the table stays a bare software_interrupt in both passes",
+    "data:CTRSVC #5: with option ctrsvc off the 3DS calls keep the vendored model",
+    "data:CTRSVC #6: with option ctrsvc off the mutex handle reads back as the caller's r1",
     "data:CTYPES #1: off, the return type is the Ghidra core-type name",
     "data:CTYPES #2: on, the same type spells as C",
     "data:CTYPES #3: off, an 8-byte unsigned cast is uint8",
@@ -932,7 +939,7 @@
     "data:KUNA-CATALOG #12: scalar ARM inputs are a default-off opt-in",
     "data:KUNA-CATALOG #13: validated A32 inventory frames are the default",
     "data:KUNA-CATALOG #14: full ARM frames are explicitly enabled",
-    "data:KUNA-CATALOG #15: 314 registry rows plus six individual queries",
+    "data:KUNA-CATALOG #15: 317 registry rows plus six individual queries",
     "data:KUNA-CATALOG #16: standard C byte-array rendering is explicitly opt-in",
     "data:KUNA-CATALOG #17: standard C byte-array rendering exposes its live state",
     "data:KUNA-CATALOG #1: compareform documented with its post-DIV-2 default and P3 address",
@@ -942,7 +949,7 @@
     "data:KUNA-CATALOG #5: each settable carries symptom-keyed use_when guidance for the operator",
     "data:KUNA-CATALOG #6: angr-derived features carry source_decompiler provenance (loweredswitch, namestyle, stackguard, branchflip, foldcallret, dedupvardecls, relocobjects, i386_pie_plt, noreturn_propagate, loopbreak_recovery, gotoreduce, crossjumprevert, taildup, dedupitetail, returndup, iteregion, iteexpr, switchguardbound, switchsharedcase, switchmultipred, unrolledguard, tailcalljump, regionstructure, regionlooprefine, regionedgeorder, ifelseflatten, noreturn_extern, noreturn_externmatch, earlyreturn, switchreturn, condfold, securitycheck, structsynth, protoorder, calleevote)",
     "data:KUNA-CATALOG #7: change_kind structure-recovery tags the switch/array/loader/loop/tail-call reconstructors (loweredswitch, switchselector, constselectjump, arraystride, relocobjects, noreturn_propagate, loopbreak_recovery, gotoreduce, crossjumprevert, taildup, dedupitetail, returndup, iteregion, iteexpr, tailcalljump, regionstructure, regionlooprefine, regionedgeorder, ifelseflatten, earlyreturn, switchreturn, condfold, iteboolean, paramcopyhoist, itecondlist, guardarm, loopcondhoist, orchain, endptrbound, loweredswitchheads, structsynth, structmerge, structheadless, devectorize)",
-    "data:KUNA-CATALOG #8: the opt-in-tool change_kind counts explicitly opted transformations (returnpair counted twice; +switchguardbound, +switchsharedcase, +switchmultipred, +unrolledguard, +branchflip, +outline, +spillargtrial, +securitycheck, +msvcstackguard, +nulterminator, +stackaddrargtrial, +jumptablemax, +globalarrayanchor, +stackviews)",
+    "data:KUNA-CATALOG #8: the opt-in-tool change_kind counts explicitly opted transformations (returnpair counted twice; +switchguardbound, +switchsharedcase, +switchmultipred, +unrolledguard, +branchflip, +outline, +spillargtrial, +securitycheck, +msvcstackguard, +nulterminator, +stackaddrargtrial, +jumptablemax, +globalarrayanchor, +stackviews, +ctrsvc)",
     "data:KUNA-CATALOG #9: every settable carries a machine-readable change_kind so an LLM can judge default-on eligibility",
     "data:KUNA-CONDCALL #1: the instruction after a blgt is not a function",
     "data:KUNA-CONDCALL #2: the predicated callers are functions",

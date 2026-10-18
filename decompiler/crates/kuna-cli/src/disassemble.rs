@@ -165,6 +165,12 @@ pub(crate) struct DisArgs {
     pub(crate) target: Option<String>,
     pub(crate) sleighpath: Option<String>,
     pub(crate) isa: Option<kuna_console::engine::ArmIsa>,
+    /// `--raw-image`: `binary` has no object header; `--target` and `--base` say
+    /// how to read it and `--entry` (or the listed address) seeds discovery.
+    pub(crate) raw_image: bool,
+    pub(crate) base: Option<u64>,
+    pub(crate) entries: Vec<u64>,
+    pub(crate) assertions: Vec<kuna_console::assertions::Directive>,
 }
 
 /// Where the walk starts, where it stops, and what the program calls the start.
@@ -319,16 +325,32 @@ fn load_args(args: &DisArgs, options: Vec<(String, String)>) -> Args {
         max_fn_seconds: 0,
         options,
         func_decls: args.func_decls.clone(),
-        assertions: Vec::new(),
+        assertions: args.assertions.clone(),
         assert_strict: false,
         slice: args.slice.clone(),
         target: args.target.clone(),
         sleighpath: args.sleighpath.clone(),
         isa: args.isa,
-        raw_image: false,
-        base: None,
+        raw_image: args.raw_image,
+        base: args.base,
+        entry_seeds: raw_entry_seeds(args),
         ..Args::serial()
     }
+}
+
+/// The numeric seeds a raw image is discovered from: `--entry`, else the start of
+/// the listed address, else the image base.
+fn raw_entry_seeds(args: &DisArgs) -> Vec<kuna_console::engine::EntrySelector> {
+    if !args.raw_image {
+        return Vec::new();
+    }
+    let start = args.spec.split(['-', '.']).next().and_then(|t| parse_addr(t).ok());
+    let seeds: Vec<u64> = if args.entries.is_empty() {
+        start.or(args.base).into_iter().collect()
+    } else {
+        args.entries.clone()
+    };
+    seeds.into_iter().map(kuna_console::engine::EntrySelector::Numeric).collect()
 }
 
 /// Render the listing for an already-resolved target.
@@ -1015,6 +1037,10 @@ pub(crate) fn parse_args(argv: &[String]) -> Result<DisArgs, String> {
     let mut target: Option<String> = None;
     let mut sleighpath: Option<String> = None;
     let mut isa = None;
+    let mut raw_image = false;
+    let mut base: Option<u64> = None;
+    let mut entries: Vec<u64> = Vec::new();
+    let mut exheader: Option<String> = None;
 
     let mut i = 0;
     while i < argv.len() {
@@ -1033,6 +1059,10 @@ pub(crate) fn parse_args(argv: &[String]) -> Result<DisArgs, String> {
                 func_decls.extend(crate::funcdecl::parse_flag(&v)?);
             }
             "--isa" => isa = kuna_console::engine::ArmIsa::parse(&take(argv, &mut i, "--isa")?)?,
+            "--raw-image" => raw_image = true,
+            "--base" => base = Some(parse_addr(&take(argv, &mut i, "--base")?)?),
+            "--entry" => entries.push(parse_addr(&take(argv, &mut i, "--entry")?)?),
+            "--exheader" => exheader = Some(take(argv, &mut i, "--exheader")?),
             "--slice" => slice = Some(take(argv, &mut i, "--slice")?),
             "--target" => target = Some(take(argv, &mut i, "--target")?),
             "--sleighpath" => sleighpath = Some(take(argv, &mut i, "--sleighpath")?),
@@ -1052,6 +1082,34 @@ pub(crate) fn parse_args(argv: &[String]) -> Result<DisArgs, String> {
     let mut it = positional.into_iter();
     let binary = it.next().ok_or("disassemble requires <binary>")?;
     let spec = it.next().ok_or("disassemble requires <name|0xaddr|0xstart-0xend>")?;
+    let mut assertions = Vec::new();
+    if let Some(path) = &exheader {
+        let layout = crate::exheader::read(path, &binary)?;
+        crate::exheader::apply(&layout, &mut target, &mut base, &mut isa, &mut assertions)?;
+        raw_image = true;
+        for (name, value) in [
+            ("ctrsvc", "on".to_string()),
+            ("rawthumb", "on".to_string()),
+            ("rawvtables", crate::exheader::rawvtables_value(&layout)),
+        ] {
+            if !options.iter().any(|(n, _)| n == name) {
+                options.push((name.into(), value));
+            }
+        }
+    }
+    if raw_image {
+        if target.as_deref().is_none_or(|t| t.trim().is_empty()) {
+            return Err("--raw-image requires --target <SLEIGH-language-id> (see `kuna specs --list-targets`)".into());
+        }
+        if base.is_none() {
+            return Err("--raw-image requires --base <address>".into());
+        }
+        if slice.is_some() {
+            return Err("--slice does not apply to --raw-image input".into());
+        }
+    } else if base.is_some() || !entries.is_empty() {
+        return Err("--base and --entry require --raw-image".into());
+    }
     Ok(DisArgs {
         binary,
         spec,
@@ -1068,6 +1126,10 @@ pub(crate) fn parse_args(argv: &[String]) -> Result<DisArgs, String> {
         target,
         sleighpath,
         isa,
+        raw_image,
+        base,
+        entries,
+        assertions,
     })
 }
 
@@ -1093,7 +1155,8 @@ fn usage() {
          \x20                    [--as code|data|auto] [--count N] [--bytes N] [--follow] [--json] \\\n\
          \x20                    [--mode auto|reliable|aggressive|fast] \\\n\
          \x20                    [--define-function S[-E][=N]|@FILE].. \\\n\
-         \x20                    [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D]\n\
+         \x20                    [--option N V].. [--isa auto|arm|thumb] [--slice ARCH] [--target T] [--sleighpath D] \\\n\
+         \x20                    [--exheader FILE | --raw-image --target T --base VMA [--entry VMA].. [--isa arm|thumb]]\n\
          \n\
          The target is a function name, an address (--addr for a bare hex one), or an\n\
          explicit range (0x1000-0x1040 / 0x1000..0x1040) for bytes no function owns.\n\
@@ -1317,6 +1380,10 @@ mod tests {
             target: None,
             sleighpath: None,
             isa: None,
+            raw_image: false,
+            base: None,
+            entries: Vec::new(),
+            assertions: Vec::new(),
         }
     }
 

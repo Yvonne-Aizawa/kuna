@@ -29,6 +29,9 @@ pub fn run(args: &[String]) -> i32 {
         usage();
         return 0;
     }
+    if args.iter().any(|a| a == "--list-targets") {
+        return list_targets(args);
+    }
     if args.iter().any(|a| a == "--diff") {
         return crate::output::emit_with_status(&format!("{DIFF_NOTE}\n"), 0);
     }
@@ -95,9 +98,83 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
+/// Every SLEIGH language id the spec roots define, one per line, from their
+/// `.ldefs` files; the optional word after `--list-targets` keeps the ids that
+/// contain it (case-insensitively).
+fn list_targets(args: &[String]) -> i32 {
+    let mut filter: Option<String> = None;
+    let mut sleighpath: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--list-targets" => {}
+            "--sleighpath" => {
+                i += 1;
+                sleighpath = args.get(i).cloned();
+            }
+            other if other.starts_with('-') => {
+                eprintln!("error: unknown option {other} with --list-targets");
+                return 2;
+            }
+            word => filter = Some(word.to_ascii_lowercase()),
+        }
+        i += 1;
+    }
+    let mut ids: Vec<String> = Vec::new();
+    for root in crate::decompile_all::spec_roots(sleighpath.as_deref()) {
+        collect_ldefs(std::path::Path::new(&root), &mut ids);
+    }
+    ids.sort();
+    ids.dedup();
+    if let Some(word) = &filter {
+        ids.retain(|id| id.to_ascii_lowercase().contains(word.as_str()));
+    }
+    if ids.is_empty() {
+        eprintln!("error: no SLEIGH language ids found (is the spec directory set? try --sleighpath)");
+        return 1;
+    }
+    let mut text = ids.join("\n");
+    text.push('\n');
+    crate::output::emit_with_status(&text, 0)
+}
+
+fn collect_ldefs(dir: &std::path::Path, ids: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_ldefs(&path, ids);
+        } else if path.extension().is_some_and(|e| e == "ldefs") {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                ids.extend(language_ids(&text));
+            }
+        }
+    }
+}
+
+/// The `id="..."` of each `<language ...>` element in an `.ldefs` document.
+fn language_ids(text: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("<language ") {
+        rest = &rest[at + "<language ".len()..];
+        let end = rest.find('>').unwrap_or(rest.len());
+        let tag = &rest[..end];
+        if let Some(start) = tag.find(" id=\"").map(|p| p + 5).or_else(|| tag.strip_prefix("id=\"").map(|_| 4)) {
+            if let Some(len) = tag[start..].find('"') {
+                ids.push(tag[start..start + len].to_string());
+            }
+        }
+        rest = &rest[end..];
+    }
+    ids
+}
+
 fn usage() {
     eprintln!(
-        "usage: kuna specs [-a <dir>] [<file.slaspec>..] [--diff]\n\
+        "usage: kuna specs [-a <dir>] [<file.slaspec>..] [--diff] [--list-targets [WORD] [--sleighpath D]]\n\
          \n\
          Compile SLEIGH processor specifications with the Rust SLEIGH compiler\n\
          (`slacomp`), which this command is a thin alias for -- every other flag is\n\
@@ -107,6 +184,19 @@ fn usage() {
          specs/); a bare list of files compiles just those.  A .sla is a build\n\
          artifact and is gitignored; the engine finds them under KUNA_SPECS /\n\
          SLEIGHHOME.  A release kuna carries its compiled specs inside itself.\n\
+         --list-targets prints every SLEIGH language id the spec directory defines (the\n\
+         values --target takes), keeping those that contain WORD, e.g. `arm:le:32`.\n\
          --diff prints guidance for independent compiler and decompiler checks; it runs neither."
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::language_ids;
+
+    #[test]
+    fn language_ids_reads_each_language_element() {
+        let text = "<language_definitions>\n  <language processor=\"ARM\"\n            id=\"ARM:LE:32:v6\">\n  </language>\n  <language id=\"x86:LE:64:default\" processor=\"x86\"/>\n</language_definitions>";
+        assert_eq!(language_ids(text), vec!["ARM:LE:32:v6", "x86:LE:64:default"]);
+    }
 }

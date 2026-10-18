@@ -496,6 +496,17 @@ pub struct ConsoleProgram {
     pending_analysis: Vec<(&'static str, kuna_analysis::pass::AnalysisOutput)>,
     /// Mixed-ARM TE entry evidence awaiting the post-overlay decode walk.
     pending_entry_thumb: Option<PendingEntryThumb>,
+    /// (kuna `rawthumb`) Odd entries of a headerless 32-bit ARM image, as the
+    /// even addresses the walk starts from, until the commit paints them Thumb.
+    raw_thumb_seeds: Vec<u64>,
+    /// (kuna `rawthumb`) The Thumb ranges those seeds' walks painted, replayed
+    /// after the image-wide mode so the odd entry's mode outranks it.
+    raw_thumb_paints: Vec<kuna_analysis::pass::ContextPaint>,
+    /// (kuna `rawvtables`) Thumb pointers read from tables, held until the A32
+    /// descent says which of them point into code it already decoded.
+    table_thumb_roots: Vec<u64>,
+    /// (kuna `rawvtables`) The A32 pointers read from tables, held the same way.
+    table_arm_roots: Vec<u64>,
     /// (kuna) The engine default code space captured at load, used to build the
     /// `Address`es when the stashed analysis facts are committed at `read symbols`.
     analysis_code_space: Option<Rc<AddrSpace>>,
@@ -2462,22 +2473,152 @@ impl ConsoleProgram {
         let seeds: Vec<u64> =
             self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
         let known: BTreeSet<u64> = seeds.iter().copied().collect();
-        let found = {
+        let arm_candidates = std::mem::take(&mut self.table_arm_roots);
+        let thumb_candidates = std::mem::take(&mut self.table_thumb_roots);
+        let discovered = {
             let arch = self.arch();
-            kuna_analysis::listing::kuna_rawdiscover::discover(
+            kuna_analysis::listing::kuna_rawdiscover::discover_with_tables(
                 arch,
                 arch.translate(),
                 &code_space,
                 &exec,
                 &seeds,
+                &arm_candidates,
+                &thumb_candidates,
             )
         };
-        for vma in found {
+        for vma in discovered.found {
             if known.contains(&vma) {
                 continue;
             }
             self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
         }
+        let known: BTreeSet<u64> =
+            self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
+        for vma in discovered.thumb {
+            if !known.contains(&vma) {
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+            }
+            self.raw_thumb_seeds.push(vma);
+        }
+    }
+
+    /// (kuna `rawvtables`) Add the function pointers the image's tables hold to
+    /// the entries, and the Thumb ones to the `rawthumb` seeds when that is on.
+    fn seed_raw_vtables(&mut self) {
+        let Some(spec) = self.arch().raw_vtables.clone() else {
+            return;
+        };
+        if self.container != ProgramContainer::Raw
+            || self.raw_address_units != Some((1, true))
+        {
+            return;
+        }
+        let Some(code_space) = self.analysis_code_space.clone() else {
+            return;
+        };
+        let Some(base) = self
+            .sections()
+            .into_iter()
+            .filter(|(_, _, flags)| flags & section_flags::CODE != 0)
+            .map(|(addr, _, _)| addr)
+            .min()
+        else {
+            return;
+        };
+        let path = self.image_path();
+        let Ok(bytes) = std::fs::read(&path) else {
+            return;
+        };
+        let roots = kuna_decomp::kuna_rawvtables::scan(&spec, &bytes, base);
+        let thumb_on = self.arch().analysis_rawthumb;
+        let known: BTreeSet<u64> =
+            self.pending_synthetic_entries.iter().map(|addr| addr.get_offset()).collect();
+        let mut added = 0usize;
+        let mut thumb = 0usize;
+        for (list, is_thumb) in [(&roots.arm, false), (&roots.thumb, true)] {
+            if is_thumb && !thumb_on {
+                continue;
+            }
+            for &vma in list {
+                if known.contains(&vma) {
+                    continue;
+                }
+                if is_thumb {
+                    self.table_thumb_roots.push(vma);
+                    thumb += 1;
+                } else {
+                    self.table_arm_roots.push(vma);
+                    added += 1;
+                }
+            }
+        }
+        kuna_base::notes::say_once(
+            &path,
+            &format!(
+                "[kuna rawvtables] {path}: {added} A32 and {thumb} Thumb function pointer(s) found in the tables"
+            ),
+        );
+        if !self.arch().analysis_rawdiscover {
+            let arm = std::mem::take(&mut self.table_arm_roots);
+            let thumb = std::mem::take(&mut self.table_thumb_roots);
+            for vma in arm.into_iter().chain(thumb.iter().copied()) {
+                self.pending_synthetic_entries.push(Address::new(Rc::clone(&code_space), vma));
+            }
+            self.raw_thumb_seeds.extend(thumb);
+        }
+    }
+
+    /// (kuna `rawthumb`) Paint the flow reachable from each odd raw-image entry
+    /// as Thumb, writing the database now so the discovery that follows decodes
+    /// it in the right mode, and stashing the paints for the commit's record.
+    fn paint_raw_thumb_seeds(&mut self) -> KunaResult<()> {
+        let seeds = std::mem::take(&mut self.raw_thumb_seeds);
+        if seeds.is_empty() || !self.arch().analysis_rawthumb {
+            return Ok(());
+        }
+        let Some(code_space) = self.analysis_code_space.clone() else {
+            return Ok(());
+        };
+        let ranges: Vec<(u64, u64)> = self
+            .sections()
+            .into_iter()
+            .filter(|(_, _, flags)| flags & section_flags::CODE != 0)
+            .map(|(addr, size, _)| (addr, size))
+            .collect();
+        let mut paints = Vec::new();
+        for entry in seeds {
+            let flow = kuna_analysis::listing::kuna_entrythumbflow::entry_thumb_flow(
+                self.arch(),
+                &code_space,
+                &ranges,
+                entry,
+                &[],
+            )?;
+            if flow.truncated {
+                let path = self.image_path();
+                kuna_base::notes::say_once(
+                    &path,
+                    &format!(
+                        "[kuna rawthumb] {path}: the Thumb walk from 0x{entry:x} stopped at {} instructions; code it did not reach decodes in the image mode",
+                        kuna_analysis::listing::kuna_entrythumbflow::MAX_INSTRUCTIONS
+                    ),
+                );
+            }
+            for paint in &flow.paints {
+                let begin = Address::new(Rc::clone(&code_space), paint.addr);
+                let end = paint.end.map(|end| Address::new(Rc::clone(&code_space), end));
+                self.arch().with_context_db_mut(|db| match end {
+                    Some(end) => {
+                        db.set_variable_region(paint.var.as_bytes(), &begin, &end, paint.value)
+                    }
+                    None => db.set_variable(paint.var.as_bytes(), &begin, paint.value),
+                })?;
+            }
+            paints.extend(flow.paints);
+        }
+        self.raw_thumb_paints.extend(paints);
+        Ok(())
     }
 
     /// (kuna) Commit the stashed per-pass analysis facts, gated by the per-pass
@@ -2504,6 +2645,8 @@ impl ConsoleProgram {
     /// defensively re-gated facts merge into the same `merged` output committed
     /// below. With Listing off, this whole block is skipped.
     pub fn commit_pending_analysis(&mut self) -> KunaResult<()> {
+        self.seed_raw_vtables();
+        self.paint_raw_thumb_seeds()?;
         if !self.pending_synthetic_entries.is_empty() {
             // (kuna `rawdiscover`) A headerless image reaches this point holding
             // only the `--entry` addresses the caller typed, because the
@@ -2512,6 +2655,7 @@ impl ConsoleProgram {
             // are named and installed by the same loop.
             if self.container == ProgramContainer::Raw && self.arch().analysis_rawdiscover {
                 self.discover_raw_entries();
+                self.paint_raw_thumb_seeds()?;
             }
             let entries = std::mem::take(&mut self.pending_synthetic_entries);
             let symbols = entries
@@ -2784,6 +2928,7 @@ impl ConsoleProgram {
         // terms: see `suppress_pdb_interior_entries`.
         suppress_pdb_interior_entries(self.arch(), &code_space, &mut merged);
         merged.context_paints.extend(input_context_paints);
+        merged.context_paints.extend(std::mem::take(&mut self.raw_thumb_paints));
         let committed = commit_analysis_output(self, &code_space, merged);
         self.stash_float_scan();
         committed
@@ -3661,6 +3806,10 @@ fn empty_program(
         image_metadata: None,
         pending_analysis: Vec::new(),
         pending_entry_thumb: None,
+        raw_thumb_seeds: Vec::new(),
+        raw_thumb_paints: Vec::new(),
+        table_thumb_roots: Vec::new(),
+        table_arm_roots: Vec::new(),
         analysis_code_space: None,
         dwarf_locals: Vec::new(),
         libctypes_glibc: false,
@@ -3771,8 +3920,12 @@ pub fn bootstrap_from_raw(
         ));
     }
     let mut normalized_entries = Vec::new();
+    let mut thumb_seeds = Vec::new();
     for &entry in entries {
         let entry_units = if arm32 { entry & !1 } else { entry };
+        if arm32 && entry & 1 == 1 && isa == Some(ArmIsa::Arm) {
+            thumb_seeds.push(address_to_byte(entry_units, "entry")?);
+        }
         let normalized = address_to_byte(entry_units, "entry")?;
         if normalized < image_base || normalized >= image_end {
             return Err(KunaError::lowlevel(format!(
@@ -3817,6 +3970,7 @@ pub fn bootstrap_from_raw(
     prog.pending_analysis = input_isa_stash(input_context_paints);
     prog.analysis_code_space = Some(code_space);
     prog.raw_address_units = Some((word_size, arm32));
+    prog.raw_thumb_seeds = thumb_seeds;
     Ok(prog)
 }
 
