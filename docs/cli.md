@@ -1121,6 +1121,29 @@ half-open range is rejected. Duplicate entries collapse. ARM32 raw input require
 even byte address before validation. Other addresses retain every input bit, so
 an odd ARM data or property address still selects the odd byte.
 
+### `--symbols FILE`
+
+Names addresses from a file of `<address> <name>` lines (either order; spaces, commas, `=`
+or `|` between; `#` and `//` comments; `0x12b284 gfl::Alloc` or `gfl::Alloc = 0x12b284`).
+On a headerless raw image it names the function at that address and starts one there. On a
+3DS `.cro` module an address below the static module base names the function in the module
+(a file offset), and an address at or above `0x100000` is read as an address in `code.bin`:
+it renames the import that module has of that address; the default name carries that address
+(`import_static_12b284`), so what you see is what you write. An address that names nothing is
+reported once on stderr (`N of M symbol(s) named nothing`), and an address named twice is
+warned about, the later name winning. Elsewhere (ELF, PE) use `--define-function`. A file with no
+usable lines is an error.
+
+### Nintendo 3DS `.cro` modules
+
+A `.cro` (or `.crs`) file loads without flags: `kuna decompile Module.cro nnroControlObject_`.
+The module is mapped at address 0, so addresses are file offsets; its segments get their
+permissions and `.bss` is zero filled; its exports are named; and its relocations are
+applied (`--option crorelocs off` maps it as stored), which fills jump tables and points
+imported-function words at named stubs (`import_static_12b284(...)` for an import of the game's
+`0x12b284`). Not supported yet: another load address and resolving the imports to
+names in `code.bin`.
+
 ### Nintendo 3DS `.code` images
 
 `--exheader <exheader.bin>` loads a decrypted, decompressed ExeFS `.code` file as a

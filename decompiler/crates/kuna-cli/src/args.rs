@@ -28,3 +28,18 @@ pub(crate) fn take_option(argv: &[String], i: &mut usize) -> Result<(String, Str
     *i += 2;
     Ok((name.clone(), value.clone()))
 }
+
+/// `--symbols FILE`: check the file and hand its path to the loaders through
+/// [`kuna_analysis::symbolnames::SYMBOLS_ENV`].
+pub(crate) fn use_symbols(path: &str) -> Result<(), String> {
+    let absolute = std::fs::canonicalize(path).map_err(|e| format!("--symbols {path}: {e}"))?;
+    let names = kuna_analysis::symbolnames::read(&absolute).map_err(|e| format!("--symbols: {e}"))?;
+    let mut seen: std::collections::BTreeMap<u64, &str> = std::collections::BTreeMap::new();
+    for (addr, name) in &names {
+        if let Some(first) = seen.insert(*addr, name.as_str()).filter(|first| first != name) {
+            eprintln!("[kuna symbols] {path}: {addr:#x} is named both {first} and {name}; {name} wins");
+        }
+    }
+    std::env::set_var(kuna_analysis::symbolnames::SYMBOLS_ENV, absolute);
+    Ok(())
+}

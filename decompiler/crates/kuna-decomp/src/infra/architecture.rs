@@ -1931,6 +1931,9 @@ pub struct Architecture {
     /// normalized to an even address and decoded in the image-wide mode;
     /// default off.
     pub analysis_rawthumb: bool,
+    /// (kuna) Gate `crofuncptrs`: a CRO module's code pointers, found through its
+    /// relocations, start functions; default on.
+    pub analysis_crofuncptrs: bool,
     /// (kuna `rawvtables`) The ranges a headerless ARM32 image's function
     /// pointers are read from, and the code they must target; `None` (the
     /// default) reads none.  See
@@ -3058,6 +3061,7 @@ impl Architecture {
             analysis_armwalkmode: false,
             analysis_entrythumbflow: false,
             analysis_rawthumb: false,
+            analysis_crofuncptrs: false,
             raw_vtables: None,
             analysis_mips_gp: false,
             analysis_i386_pie_plt: false,
@@ -3463,6 +3467,7 @@ impl Architecture {
         self.analysis_arm_markers = true;
         self.analysis_armfuncmode = true; // (kuna) even ARM function symbol = A32 when no mapping symbols
         self.analysis_armwalkmode = true; // (kuna) ARM walk decodes in the mode its control flow carries
+        self.analysis_crofuncptrs = true; // (kuna) default-on: inert off a CRO module
         self.analysis_entrythumbflow = true; // (kuna) entry-reachable Thumb context default-on; inert without a Thumb-bit entry
         self.analysis_mips_gp = true;
         self.analysis_i386_pie_plt = true; // (kuna) i386-PIE PLT decode default-on (angr)

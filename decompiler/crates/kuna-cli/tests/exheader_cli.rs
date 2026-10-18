@@ -166,3 +166,82 @@ fn disassemble_reads_a_code_image_and_specs_lists_targets() {
     assert_eq!(status, 0, "{stderr}");
     assert!(stdout.lines().any(|line| line == "ARM:LE:32:v6"), "{stdout}");
 }
+
+#[test]
+fn a_cro_module_loads_with_its_relocations_and_names() {
+    let module = write("cro-module", &kuna_analysis::loadimage_cro::synthetic::module());
+    let sp = specs();
+    let run = |extra: &[&str]| {
+        let mut args = vec!["decompile", module.as_str(), "Export", "--sleighpath", sp.as_str()];
+        args.extend(extra);
+        let (stdout, stderr, status) = common::run_kuna(&args);
+        assert_eq!(status, 0, "{stderr}");
+        stdout
+    };
+    let relocated = run(&[]);
+    for value in ["sub_240()", "return 0x14;", "return 0x1e;", "return 99;"] {
+        assert!(relocated.contains(value), "{value}: {relocated}");
+    }
+    let raw = run(&["--option", "crorelocs", "off"]);
+    assert!(!raw.contains("return 0x14;"), "{raw}");
+
+    let (stdout, stderr, status) = common::run_kuna(&["functions", &module, "--json", "--sleighpath", &sp]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("\"name\": \"Export\"") && stdout.contains("import_static_100123"), "{stdout}");
+}
+
+#[test]
+fn a_cro_code_pointer_outside_the_code_starts_a_function() {
+    let module = write("cro-pointer", &kuna_analysis::loadimage_cro::synthetic::module());
+    let sp = specs();
+    let list = |extra: &[&str]| {
+        let mut args = vec!["functions", module.as_str(), "--json", "--sleighpath", sp.as_str()];
+        args.extend(extra);
+        let (stdout, stderr, status) = common::run_kuna(&args);
+        assert_eq!(status, 0, "{stderr}");
+        stdout
+    };
+    assert!(list(&[]).contains("\"address_hex\": \"0x240\""));
+    assert!(!list(&["--option", "crofuncptrs", "off"]).contains("\"address_hex\": \"0x240\""));
+}
+
+#[test]
+fn a_symbols_file_names_cro_imports_and_raw_functions() {
+    let module = write("cro-symbols", &kuna_analysis::loadimage_cro::synthetic::module());
+    let names = write("symbols", b"# static module\n0x100123 gfl::Alloc\n0x214 DialogExport\n");
+    let sp = specs();
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "functions", &module, "--json", "--symbols", &names, "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("\"name\": \"gfl::Alloc\"") && stdout.contains("\"name\": \"DialogExport\""), "{stdout}");
+    assert!(!stdout.contains("import_static_100123"), "{stdout}");
+
+    let code = write("sym-code", &code_image());
+    let raw_names = write("raw-symbols", b"0x100050 vtable_method\n");
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "functions", &code, "--json", "--raw-image", "--target", "ARM:LE:32:v6", "--base", "0x100000",
+        "--isa", "arm", "--entry", "0x100000", "--symbols", &raw_names, "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stdout.contains("\"name\": \"vtable_method\""), "{stdout}");
+
+    let empty = write("empty-symbols", b"nothing useful\n");
+    let (_, stderr, status) = common::run_kuna(&["functions", &module, "--symbols", &empty, "--sleighpath", &sp]);
+    assert_ne!(status, 0);
+    assert!(stderr.contains("holds no"), "{stderr}");
+}
+
+#[test]
+fn a_symbols_file_reports_unmatched_and_duplicate_addresses() {
+    let module = write("cro-symbols-warn", &kuna_analysis::loadimage_cro::synthetic::module());
+    let names = write("symbols-warn", b"0x999999 nowhere\n0x214 first\n0x214 second\n");
+    let sp = specs();
+    let (stdout, stderr, status) = common::run_kuna(&[
+        "functions", &module, "--json", "--symbols", &names, "--sleighpath", &sp,
+    ]);
+    assert_eq!(status, 0, "{stderr}");
+    assert!(stderr.contains("0x214 is named both first and second; second wins"), "{stderr}");
+    assert!(stderr.contains("1 of 2 symbol(s) named nothing") && stderr.contains("0x999999"), "{stderr}");
+    assert!(stdout.contains("\"name\": \"second\""), "{stdout}");
+}

@@ -959,6 +959,7 @@ kuna_options! { self, p1;
         self.raw_vtables = spec;
         Ok(msg)
     },
+    "crofuncptrs" => on_off!(analysis_crofuncptrs, "CRO relocation-found function starts"),
     "rawthumb" => on_off!(analysis_rawthumb, "Thumb mode for odd raw-image entries"),
     "mips_gp" => on_off!(analysis_mips_gp, "MIPS $gp-recovery (t9 tracking) pass"),
     "i386_pie_plt" => {
@@ -1101,6 +1102,11 @@ kuna_options! { self, p1;
             "DWARF variant-part import turned {}",
             if val { "on" } else { "off" }
         ))
+    },
+    "crorelocs" => {
+        let val = on_or_off(p1)?;
+        crate::kuna_crorelocs::set_crorelocs_env(val);
+        Ok(format!("CRO relocations turned {}", if val { "on" } else { "off" }))
     },
     "callfixup" => on_off!(analysis_callfixup, "Call-fixup analysis pass"),
     "addrtable" => on_off!(analysis_addrtable, "Address-table analysis pass"),

@@ -38,13 +38,13 @@ fn surface_count_is_120() {
 }
 
 #[test]
-fn settable_count_is_317() {
-    assert_eq!(kuna_num_settables(), 317);
-    assert_eq!(SETTABLE_TABLE.len(), 317);
+fn settable_count_is_319() {
+    assert_eq!(kuna_num_settables(), 319);
+    assert_eq!(SETTABLE_TABLE.len(), 319);
 }
 
 #[test]
-fn tier_counts_are_115_core_120_transform_82_analysis() {
+fn tier_counts_are_115_core_120_transform_84_analysis() {
     let mut core = 0;
     let mut transform = 0;
     let mut analysis = 0;
@@ -56,7 +56,7 @@ fn tier_counts_are_115_core_120_transform_82_analysis() {
             other => panic!("invalid tier {other:?} on {}", s.option),
         }
     }
-    assert_eq!((core, transform, analysis), (115, 120, 82));
+    assert_eq!((core, transform, analysis), (115, 120, 84));
 }
 
 #[test]
@@ -532,6 +532,10 @@ fn option_values_live_value_present_for_110() {
         // the analysis COMMIT boundary, so it has no codegen live_value and no
         // on/off form to report.
         "rawvtables",
+        // (kuna) 3DS CRO relocations -- a LOAD-time gate read from the
+        // `KUNA_CRORELOCS` env var while the module is mapped, so like
+        // `typedepth` it has no codegen live_value. Default-on.
+        "crorelocs",
     ];
     let mut with_live = 0;
     for i in 0..kuna_num_settables() {
@@ -838,7 +842,8 @@ fn option_values_live_value_present_for_110() {
     // 143 -> 144: +1 for `narrowargs` (live_field = narrow_args).
     // 144 -> 145: +1 for `ctrsvc` (live_field = ctr_svc).
     // 145 -> 146: +1 for `rawthumb` (live_field = analysis_rawthumb).
-    assert_eq!(with_live, 146);
+    // 146 -> 147: +1 for `crofuncptrs` (live_field = analysis_crofuncptrs).
+    assert_eq!(with_live, 147);
 }
 
 #[test]
@@ -1036,8 +1041,8 @@ fn emit_catalog_json_static_form_brackets_and_commas() {
     // +1 for `bytearrayc`; its P9 row sits mid-table.
     // +2 for `wideslice` and `devectorize`.
     // +1 for `addrtakenentry`; its P1 row sits mid-table beside `thunkentry`.
-    // +1 for `ctrsvc`, +1 for `rawthumb`, +1 for `rawvtables`.
-    assert_eq!(json.matches("},\n").count(), 316);
+    // +1 for `ctrsvc`, +1 for `rawthumb`, +1 for `rawvtables`, +1 for `crorelocs`, +1 for `crofuncptrs`.
+    assert_eq!(json.matches("},\n").count(), 318);
 }
 
 #[test]
